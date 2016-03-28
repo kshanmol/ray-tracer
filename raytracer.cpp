@@ -28,11 +28,11 @@ public:
         return *this;
     }
 
-    T dotProduct(const Vec3<T> &v){ 
+    T dotProduct(const Vec3<T> &v) const { 
         return x * v.x + y * v.y + z * v.z; 
     }
 
-    Vec3<T> crossProduct(const Vec3<T> &v){ 
+    Vec3<T> crossProduct(const Vec3<T> &v) const { 
 
         T tmpX = y * v.z - z * v.y;
         T tmpY = z * v.x - x * v.z;
