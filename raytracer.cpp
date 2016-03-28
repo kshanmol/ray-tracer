@@ -12,32 +12,40 @@ static const float eps = 1e-8;
 
 template<typename T>
 class Vec3{
-
 public:
+
     T x, y, z;
     Vec3() : x(T(0)), y(T(0)), z(T(0)) {}
-    Vec3(T xx) : x(xx), y(xx), z(xx) {}
-    Vec3(T xx, T yy, T zz) : x(xx), y(yy), z(zz) {}
+    Vec3(T val) : x(val), y(val), z(val) {}
+    Vec3(T xval, T yval, T zval) : x(xval), y(yval), z(zval) {}
 
     Vec3& normalize(){
         T nor2 = length2();
         if (nor2 > 0) {
-            T invNor = 1 / sqrt(nor2);
-            x *= invNor, y *= invNor, z *= invNor;
+            T nor_inv = 1 / sqrt(nor2);
+            x *= nor_inv, y *= nor_inv, z *= nor_inv;
         }
         return *this;
     }
 
-    T dotProduct(const Vec3<T> &v) const { return x * v.x + y * v.y + z * v.z; }
-    Vec3<T> crossProduct(const Vec3<T> &v) const { 
+    T dotProduct(const Vec3<T> &v){ 
+        return x * v.x + y * v.y + z * v.z; 
+    }
+
+    Vec3<T> crossProduct(const Vec3<T> &v){ 
 
         T tmpX = y * v.z - z * v.y;
         T tmpY = z * v.x - x * v.z;
         T tmpZ = x * v.y - y * v.x;
         return Vec3<T>(tmpX, tmpY, tmpZ ); 
     }
-    T length2() const { return x * x + y * y + z * z; }
-    T length() const { return sqrt(length2()); }
+
+    T length2(){ 
+        return x * x + y * y + z * z;
+    }
+    T length(){
+        return sqrt(length2()); 
+    }
 
     Vec3<T> operator * (const T &f) const { return Vec3<T>(x * f, y * f, z * f); }
     Vec3<T> operator * (const Vec3<T> &v) const { return Vec3<T>(x * v.x, y * v.y, z * v.z); }
@@ -97,7 +105,7 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir, const std::vector<Triangl
     float tnear = INFINITY;
 
     const Triangle* triangle_near = NULL;
-    for (unsigned i = 0; i < triangle_list.size(); ++i) {
+    for (int i = 0; i < triangle_list.size(); ++i) {
         float t0 = INFINITY;
         if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0)) {
             if (t0 < tnear) {
@@ -106,7 +114,9 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir, const std::vector<Triangl
             }
         }
     }
-    if (!triangle_near) return Vec3f(0);
+    if (!triangle_near)
+        return Vec3f(0);
+
     std::cout << tnear << " " << "Found\n";
     return Vec3f(fabs(0.0625*tnear));
     
@@ -114,15 +124,15 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir, const std::vector<Triangl
 
 void render(const std::vector<Triangle*> &triangle_list){
 
-    unsigned width = 200, height = 200;
+    int width = 200, height = 200;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
     float angle = tan(M_PI * 0.5 * fov / 180.);
     // Trace rays
     int cnt = 0;
-    for (unsigned y = 0; y < height; ++y) {
-        for (unsigned x = 0; x < width; ++x, ++pixel) {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x, ++pixel) {
             float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, -2);
@@ -134,7 +144,7 @@ void render(const std::vector<Triangle*> &triangle_list){
     // Save result to a PPM image (keep these flags if you compile under Windows)
     std::ofstream ofs("./trial10.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
-    for (unsigned i = 0; i < width * height; ++i) {
+    for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x) * 255) <<
                (unsigned char)(std::min(float(1), image[i].y) * 255) <<
                (unsigned char)(std::min(float(1), image[i].z) * 255);
