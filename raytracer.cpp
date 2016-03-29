@@ -199,10 +199,10 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     // assume only 1 light over here.
     Vec3f light_pos(1.5, 1.5, 1.5);
 
-    Vec3f v = raydir.negate();
+    Vec3f eye = raydir.negate();
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f l = light_pos.subtract(poi);
-    Vec3f half = v.add(l).normalize();
+    Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near->getNormal(poi);
 
     // rayorig.negate();
@@ -211,7 +211,7 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     // Vec3f normal = triangle_near->getNormal(rayorig.negate().add( raydir.negate().scale(tnear) ));
 
     Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l)));
-    Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(h)), spec_alpha));
+    Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
 
     // return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
     return diffuse.add(specular);
