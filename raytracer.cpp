@@ -191,20 +191,30 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     png::rgb_pixel texture = texture_map.get_pixel(u, v);
 
     // Simple blinn phong shading
-    Vec3f color(fabs(0.0625));
-    float kd = 0.2;
-    float ks = 0.4;
+    Vec3f color(fabs(100));
+    float kd = 2;
+    float ks = 4;
     float spec_alpha = 2;
 
     // assume only 1 light over here.
     Vec3f light_pos(1.5, 1.5, 1.5);
 
-    rayorig.negate();
-    raydir.negate();
-    Vec3f half = (rayorig.add(raydir)).normalize();
-    Vec3f normal = triangle_near->getNormal(rayorig.negate().add( raydir.negate().scale(tnear) ));
+    Vec3f v = raydir.negate();
+    Vec3f poi = rayorig.add( raydir.scale(tnear) );
+    Vec3f l = light_pos.subtract(poi);
+    Vec3f half = v.add(l).normalize();
+    Vec3f n = triangle_near->getNormal(poi);
 
-    return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
+    // rayorig.negate();
+    // raydir.negate();
+    // Vec3f half = (rayorig.add(raydir)).normalize();
+    // Vec3f normal = triangle_near->getNormal(rayorig.negate().add( raydir.negate().scale(tnear) ));
+
+    Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l)));
+    Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(h)), spec_alpha));
+
+    // return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
+    return diffuse.add(specular);
 
     // return Vec3f(texture.red, texture.green, texture.blue);
 }
@@ -229,8 +239,8 @@ void render(const std::vector<Triangle*> &triangle_list){
             Vec3f raydir(xx, yy, -2);
             raydir.normalize();
             *pixel = trace(Vec3f(0,0.1,-7), raydir, triangle_list, texture_map);
-            // std::cout << cnt << "\n"; cnt++;
         }
+        std::cout << y << "\n"; cnt++;
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
     std::ofstream ofs("./trial10.ppm", std::ios::out | std::ios::binary);
