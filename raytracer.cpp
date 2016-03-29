@@ -172,7 +172,7 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir,
     int v = (int) (((1 - beta - gamma)*triangle_near->tv1.y + beta*triangle_near->tv0.y + gamma*triangle_near->tv2.y) * texture_map.get_height());
 
     u = clamp(u, 0, texture_map.get_width() - 1);
-    v = clamp(u, 0, texture_map.get_height() - 1);
+    v = clamp(v, 0, texture_map.get_height() - 1);
 
     png::rgb_pixel texture = texture_map.get_pixel(u, v);
 
@@ -181,7 +181,7 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir,
 
 void render(const std::vector<Triangle*> &triangle_list){
 
-    int width = 200, height = 200;
+    int width = 400, height = 400;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
@@ -203,12 +203,12 @@ void render(const std::vector<Triangle*> &triangle_list){
         }
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
-    std::ofstream ofs("./trial10.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./trial11.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
-        ofs << (unsigned char)(std::min(float(1), image[i].x) * 255) <<
-               (unsigned char)(std::min(float(1), image[i].y) * 255) <<
-               (unsigned char)(std::min(float(1), image[i].z) * 255);
+        ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
+               (unsigned char)(std::min(float(1), image[i].y/255)*255 ) <<
+               (unsigned char)(std::min(float(1), image[i].z/255)*255 );
     }
     ofs.close();
     delete [] image;
