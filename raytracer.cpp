@@ -140,9 +140,23 @@ public:
 
     }
 
+    Vec3f getNormal(Vec3f point) const
+    {
+        // from http://math.stackexchange.com/a/137551
+        Vec3f p = point.subtract(v1);
+        Vec3f q = v0.subtract(v2);
+
+        // use point here. !!
+
+        return Vec3f(
+                    p.y * q.z - p.z * q.y,
+                    -1 * (p.x*q.z - p.z * q.x),
+                    p.x*q.y - p.y*q.x
+                    );
+    }
 };
 
-Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir,
+Vec3f trace(Vec3f rayorig, Vec3f raydir,
             const std::vector<Triangle*> &triangle_list,
             const png::image< png::rgb_pixel > texture_map)
 {
@@ -176,7 +190,23 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir,
 
     png::rgb_pixel texture = texture_map.get_pixel(u, v);
 
-    return Vec3f(texture.red, texture.green, texture.blue);
+    // Simple blinn phong shading
+    Vec3f color(fabs(0.0625));
+    float kd = 0.2;
+    float ks = 0.4;
+    float spec_alpha = 2;
+
+    // assume only 1 light over here.
+    Vec3f light_pos(1.5, 1.5, 1.5);
+
+    rayorig.negate();
+    raydir.negate();
+    Vec3f half = (rayorig.add(raydir)).normalize();
+    Vec3f normal = triangle_near->getNormal(rayorig.negate().add( raydir.negate().scale(tnear) ));
+
+    return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
+
+    // return Vec3f(texture.red, texture.green, texture.blue);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
