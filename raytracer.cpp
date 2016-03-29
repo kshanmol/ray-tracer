@@ -15,6 +15,7 @@ class Vec3{
 public:
 
     T x, y, z;
+    //Constructors
     Vec3() : x(T(0)), y(T(0)), z(T(0)) {}
     Vec3(T val) : x(val), y(val), z(val) {}
     Vec3(T xval, T yval, T zval) : x(xval), y(yval), z(zval) {}
@@ -28,11 +29,11 @@ public:
         return *this;
     }
 
-    T dotProduct(const Vec3<T> &v){ 
+    T dotProduct(const Vec3<T> &v) const { 
         return x * v.x + y * v.y + z * v.z; 
     }
 
-    Vec3<T> crossProduct(const Vec3<T> &v){ 
+    Vec3<T> crossProduct(const Vec3<T> &v) const { 
 
         T tmpX = y * v.z - z * v.y;
         T tmpY = z * v.x - x * v.z;
@@ -47,15 +48,29 @@ public:
         return sqrt(length2()); 
     }
 
-    Vec3<T> operator * (const T &f) const { return Vec3<T>(x * f, y * f, z * f); }
-    Vec3<T> operator * (const Vec3<T> &v) const { return Vec3<T>(x * v.x, y * v.y, z * v.z); }
-    Vec3<T> operator - (const Vec3<T> &v) const { return Vec3<T>(x - v.x, y - v.y, z - v.z); }
-    Vec3<T> operator + (const Vec3<T> &v) const { return Vec3<T>(x + v.x, y + v.y, z + v.z); }
-    Vec3<T>& operator += (const Vec3<T> &v) { x += v.x, y += v.y, z += v.z; return *this; }
-    Vec3<T> operator - () const { return Vec3<T>(-x, -y, -z); }
+    Vec3<T> scale(const T &f) const {
+        return Vec3<T>(x * f, y * f, z * f);        
+    }
 
+    Vec3<T> multiply(const Vec3<T> &v) const {
+        return Vec3<T>(x * v.x, y * v.y, z * v.z);    
+    }
+
+    Vec3<T> subtract(const Vec3<T> &v) const { 
+        return Vec3<T>(x - v.x, y - v.y, z - v.z); 
+    }
+
+    Vec3<T> add(const Vec3<T> &v) const {
+        return Vec3<T>(x + v.x, y + v.y, z + v.z);        
+    }
+
+    Vec3<T> negate() const {
+        return Vec3<T>(-x, -y, -z);
+    }   
+
+    //Helper function to format display 
     friend std::ostream & operator << (std::ostream &os, const Vec3<T> &v){
-        os << "[" << v.x << " " << v.y << " " << v.z << "]";
+        os << "(" << v.x << " " << v.y << " " << v.z << ")";
         return os;
     }
 };
@@ -73,10 +88,12 @@ public:
         const Vec3f &v_2 ) :
         v0(v_0), v1(v_1), v2(v_2)
     { /* empty */ }
+
+    //Not our stuff yet.
     bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t){
 
-        Vec3f v0v1 = v1 - v0; 
-        Vec3f v0v2 = v2 - v0; 
+        Vec3f v0v1 = v1.subtract(v0); 
+        Vec3f v0v2 = v2.subtract(v0); 
         Vec3f pvec = dir.crossProduct(v0v2); 
         float det = v0v1.dotProduct(pvec); 
      
@@ -85,7 +102,7 @@ public:
      
         float invDet = 1 / det; 
      
-        Vec3f tvec = orig - v0; 
+        Vec3f tvec = orig.subtract(v0); 
         float u = tvec.dotProduct(pvec) * invDet; 
         if (u < 0 || u > 1) return false; 
      
@@ -105,7 +122,7 @@ Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir, const std::vector<Triangl
     float tnear = INFINITY;
 
     const Triangle* triangle_near = NULL;
-    for (int i = 0; i < triangle_list.size(); ++i) {
+    for (unsigned int i = 0; i < triangle_list.size(); ++i) {
         float t0 = INFINITY;
         if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0)) {
             if (t0 < tnear) {
