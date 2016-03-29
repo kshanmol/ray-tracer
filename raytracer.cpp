@@ -156,6 +156,11 @@ public:
     }
 };
 
+void print_vec3f(const char *label, const Vec3f &v)
+{
+    std::cout << label << " [" << v.x << "," << v.y << "," << v.z << "]";
+}
+
 Vec3f trace(Vec3f rayorig, Vec3f raydir,
             const std::vector<Triangle*> &triangle_list,
             const png::image< png::rgb_pixel > texture_map)
@@ -205,6 +210,12 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near->getNormal(poi);
 
+    print_vec3f("eye", eye);
+    print_vec3f(" poi", poi);
+    print_vec3f(" l", l);
+    print_vec3f(" half", half);
+    print_vec3f(" n", n);
+
     // rayorig.negate();
     // raydir.negate();
     // Vec3f half = (rayorig.add(raydir)).normalize();
@@ -213,7 +224,13 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l)));
     Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
 
+    print_vec3f(" diffuse", diffuse);
+    print_vec3f(" specular", specular);
+
+    std::cout << std::endl;
+
     // return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
+
     return diffuse.add(specular);
 
     // return Vec3f(texture.red, texture.green, texture.blue);
