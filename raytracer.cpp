@@ -7,8 +7,13 @@
 #include <cassert>
 #include <string>
 #include <sstream>
+#include <png++/png.hpp>
 
-static const float eps = 1e-8; 
+static const float eps = 1e-8;
+double det(double a1, double a2, double a3,
+            double b1, double b2, double b3,
+            double c1, double c2, double c3);
+int clamp(int what, int low, int high);
 
 template<typename T>
 class Vec3{
@@ -29,46 +34,46 @@ public:
         return *this;
     }
 
-    T dotProduct(const Vec3<T> &v) const { 
-        return x * v.x + y * v.y + z * v.z; 
+    T dotProduct(const Vec3<T> &v) const {
+        return x * v.x + y * v.y + z * v.z;
     }
 
-    Vec3<T> crossProduct(const Vec3<T> &v) const { 
+    Vec3<T> crossProduct(const Vec3<T> &v) const {
 
         T tmpX = y * v.z - z * v.y;
         T tmpY = z * v.x - x * v.z;
         T tmpZ = x * v.y - y * v.x;
-        return Vec3<T>(tmpX, tmpY, tmpZ ); 
+        return Vec3<T>(tmpX, tmpY, tmpZ );
     }
 
-    T length2(){ 
+    T length2(){
         return x * x + y * y + z * z;
     }
     T length(){
-        return sqrt(length2()); 
+        return sqrt(length2());
     }
 
     Vec3<T> scale(const T &f) const {
-        return Vec3<T>(x * f, y * f, z * f);        
+        return Vec3<T>(x * f, y * f, z * f);
     }
 
     Vec3<T> multiply(const Vec3<T> &v) const {
-        return Vec3<T>(x * v.x, y * v.y, z * v.z);    
+        return Vec3<T>(x * v.x, y * v.y, z * v.z);
     }
 
-    Vec3<T> subtract(const Vec3<T> &v) const { 
-        return Vec3<T>(x - v.x, y - v.y, z - v.z); 
+    Vec3<T> subtract(const Vec3<T> &v) const {
+        return Vec3<T>(x - v.x, y - v.y, z - v.z);
     }
 
     Vec3<T> add(const Vec3<T> &v) const {
-        return Vec3<T>(x + v.x, y + v.y, z + v.z);        
+        return Vec3<T>(x + v.x, y + v.y, z + v.z);
     }
 
     Vec3<T> negate() const {
         return Vec3<T>(-x, -y, -z);
-    }   
+    }
 
-    //Helper function to format display 
+    //Helper function to format display
     friend std::ostream & operator << (std::ostream &os, const Vec3<T> &v){
         os << "(" << v.x << " " << v.y << " " << v.z << ")";
         return os;
@@ -79,64 +84,99 @@ typedef Vec3<float> Vec3f;
 
 class Triangle{
 public:
-    
-    Vec3f v0, v1, v2;
 
-    Triangle(
+    Vec3f v0, v1, v2;
+    Vec3f tv0, tv1, tv2; // texture coordinates of vertices
+
+     Triangle(
         const Vec3f &v_0,
-        const Vec3f &v_1, 
-        const Vec3f &v_2 ) :
-        v0(v_0), v1(v_1), v2(v_2)
-    { /* empty */ }
+        const Vec3f &v_1,
+        const Vec3f &v_2,
+        const Vec3f &tv_0,
+        const Vec3f &tv_1,
+        const Vec3f &tv_2) :
+        v0(v_0), v1(v_1), v2(v_2),
+        tv0(tv_0), tv1(tv_1), tv2(tv_2)
+     { /* empty */ }
 
     //Not our stuff yet.
-    bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t){
+    bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
 
-        Vec3f v0v1 = v1.subtract(v0); 
-        Vec3f v0v2 = v2.subtract(v0); 
-        Vec3f pvec = dir.crossProduct(v0v2); 
-        float det = v0v1.dotProduct(pvec); 
-     
-        // ray and triangle are parallel if det is close to 0
-        if (fabs(det) < eps) return false; 
-     
-        float invDet = 1 / det; 
-     
-        Vec3f tvec = orig.subtract(v0); 
-        float u = tvec.dotProduct(pvec) * invDet; 
-        if (u < 0 || u > 1) return false; 
-     
-        Vec3f qvec = tvec.crossProduct(v0v1); 
-        float v = dir.dotProduct(qvec) * invDet; 
-        if (v < 0 || u + v > 1) return false; 
-     
-        t = v0v2.dotProduct(qvec) * invDet; 
-     
-        return true; 
+        double A = det(
+                    v0.x - v1.x, v0.x - v2.x, dir.x,
+                    v0.y - v1.y, v0.y - v2.y, dir.y,
+                    v0.z - v1.z, v0.z - v2.z, dir.z
+                    );
+
+        double t_ = det(
+                    v0.x - v1.x, v0.x - v2.x, v0.x - orig.x,
+                    v0.y - v1.y, v0.y - v2.y, v0.y - orig.y,
+                    v0.z - v1.z, v0.z - v2.z, v0.z - orig.z
+                    );
+        t_ = t_ / A;
+
+        double beta_ = det(
+                    v0.x - orig.x, v0.x - v2.x, dir.x,
+                    v0.y - orig.y, v0.y - v2.y, dir.y,
+                    v0.z - orig.z, v0.z - v2.z, dir.z
+                    );
+        beta_ = beta_ / A;
+
+        double gamma_ = det(
+                    v0.x - v1.x, v0.x - orig.x, dir.x,
+                    v0.y - v1.y, v0.y - orig.y, dir.y,
+                    v0.z - v1.z, v0.z - orig.z, dir.z
+                    );
+        gamma_ = gamma_ / A;
+
+        if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
+        {
+            t = t_;
+            beta = beta_;
+            gamma = gamma_;
+            return true;
+        }
+        return false;
+
     }
 
 };
 
-Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir, const std::vector<Triangle*> &triangle_list){
-
-    float tnear = INFINITY;
+Vec3f trace(const Vec3f &rayorig, const Vec3f &raydir,
+            const std::vector<Triangle*> &triangle_list,
+            const png::image< png::rgb_pixel > texture_map)
+{
+    float tnear = INFINITY,
+          beta = INFINITY,
+          gamma = INFINITY;
 
     const Triangle* triangle_near = NULL;
     for (unsigned int i = 0; i < triangle_list.size(); ++i) {
-        float t0 = INFINITY;
-        if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0)) {
+        float t0 = INFINITY,
+              beta_ = INFINITY,
+              gamma_ = INFINITY;
+        if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
             if (t0 < tnear) {
                 tnear = t0;
                 triangle_near = triangle_list[i];
+                beta = beta_;
+                gamma = gamma_;
             }
         }
     }
     if (!triangle_near)
         return Vec3f(0);
 
-    std::cout << tnear << " " << "Found\n";
-    return Vec3f(fabs(0.0625*tnear));
-    
+    // map texture
+    int u = (int) (((1 - beta - gamma)*triangle_near->tv1.x + beta*triangle_near->tv0.x + gamma*triangle_near->tv2.x) * texture_map.get_width());
+    int v = (int) (((1 - beta - gamma)*triangle_near->tv1.y + beta*triangle_near->tv0.y + gamma*triangle_near->tv2.y) * texture_map.get_height());
+
+    u = clamp(u, 0, texture_map.get_width() - 1);
+    v = clamp(u, 0, texture_map.get_height() - 1);
+
+    png::rgb_pixel texture = texture_map.get_pixel(u, v);
+
+    return Vec3f(texture.red, texture.green, texture.blue);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
@@ -146,6 +186,10 @@ void render(const std::vector<Triangle*> &triangle_list){
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
     float angle = tan(M_PI * 0.5 * fov / 180.);
+
+    // read texture map
+    png::image< png::rgb_pixel > texture_map("texture_map.png");
+
     // Trace rays
     int cnt = 0;
     for (int y = 0; y < height; ++y) {
@@ -154,8 +198,8 @@ void render(const std::vector<Triangle*> &triangle_list){
             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, -2);
             raydir.normalize();
-            *pixel = trace(Vec3f(0,0.1,-7), raydir, triangle_list);
-            std::cout << cnt << "\n"; cnt++;
+            *pixel = trace(Vec3f(0,0.1,-7), raydir, triangle_list, texture_map);
+            // std::cout << cnt << "\n"; cnt++;
         }
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
@@ -177,6 +221,7 @@ int main(){
 
     std::string line;
     std::vector<Vec3f*> vertices;
+    std::vector<Vec3f*> vertex_textures;
     std::vector<Triangle*> triangle_list;
     Triangle* triangle;
 
@@ -191,7 +236,12 @@ int main(){
             double a, b, c;
             iss >> a >> b >> c;
             vertices.push_back(new Vec3f(a, b, c));
-        } 
+        }
+        else if (type_.compare("vt") == 0){
+            double a, b;
+            iss >> a >> b;
+            vertex_textures.push_back(new Vec3f(a, b, 0));
+        }
         else if (type_.compare("f") == 0){
 
             iss >> fv1 >> fv2 >> fv3;
@@ -200,11 +250,26 @@ int main(){
             std::stringstream ssfv3(fv3);
 
             int v1, v2, v3;
+            int vt1, vt2, vt3;
             ssfv1 >> v1;
-            ssfv2 >> v2;
-            ssfv3 >> v3;
+            ssfv1.ignore();
+            ssfv1 >> vt1;
 
-            triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1]);
+            ssfv2 >> v2;
+            ssfv2.ignore();
+            ssfv2 >> vt2;
+
+            ssfv3 >> v3;
+            ssfv3.ignore();
+            ssfv3 >> vt3;
+
+            Vec3f *vertex1 = vertices[v1 - 1];
+            Vec3f *vertex2 = vertices[v2 - 1];
+            Vec3f *vertex3 = vertices[v3 - 1];
+
+            triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
+                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
+
             triangle_list.push_back(triangle);
         }
     }
@@ -212,4 +277,22 @@ int main(){
     render(triangle_list);
 
     return 0;
+}
+
+
+double det(double a1, double a2, double a3,
+            double b1, double b2, double b3,
+            double c1, double c2, double c3)
+{
+    double t1 = a1 * (b2*c3 - b3*c2);
+    double t2 = a2 * (b1*c3 - b3*c1);
+    double t3 = a3 * (b1*c2 - b2*c1);
+    return t1 - t2 + t3;
+}
+
+int clamp(int what, int low, int high)
+{
+    if (what < low) return low;
+    if (what > high) return high;
+    return what;
 }
