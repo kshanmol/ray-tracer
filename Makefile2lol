@@ -1,0 +1,15 @@
+
+all:
+	nvcc -O3 -c raytracer.cu
+	nvcc  -O3 -o ray_tracer raytracer.o
+	rm -f raytracer.o
+
+simple:
+	nvcc -o ray_tracer  -lpng12 raytracer.cu
+
+opt:
+	nvcc -O3 -o ray_tracer -lpng12 raytracer.cu
+
+clean:
+	rm -f ray_tracer raytracer.o
+

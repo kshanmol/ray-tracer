@@ -7,7 +7,7 @@
 #include <cassert>
 #include <string>
 #include <sstream>
-#include <png++/png.hpp>
+//#include <png++/png.hpp>
 
 static const float eps = 1e-8;
 double det(double a1, double a2, double a3,
@@ -81,6 +81,10 @@ public:
 };
 
 typedef Vec3<float> Vec3f;
+
+Vec3f reflect(const Vec3f &I, const Vec3f &N){
+	return I.subtract(N.scale(2*I.dotProduct(N)));
+}
 
 class Triangle{
 public:
@@ -162,8 +166,7 @@ void print_vec3f(const char *label, const Vec3f &v)
 }
 
 Vec3f trace(Vec3f rayorig, Vec3f raydir,
-            const std::vector<Triangle*> &triangle_list,
-            const png::image< png::rgb_pixel > texture_map)
+            const std::vector<Triangle*> &triangle_list)
 {
     float tnear = INFINITY,
           beta = INFINITY,
@@ -185,30 +188,21 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     }
     if (!triangle_near)
         return Vec3f(0);
-
-    // map texture
-    int u = (int) (((1 - beta - gamma)*triangle_near->tv1.x + beta*triangle_near->tv0.x + gamma*triangle_near->tv2.x) * texture_map.get_width());
-    int v = (int) (((1 - beta - gamma)*triangle_near->tv1.y + beta*triangle_near->tv0.y + gamma*triangle_near->tv2.y) * texture_map.get_height());
-
-    u = clamp(u, 0, texture_map.get_width() - 1);
-    v = clamp(v, 0, texture_map.get_height() - 1);
-
-    png::rgb_pixel texture = texture_map.get_pixel(u, v);
-
+ 
     // Simple blinn phong shading
     Vec3f color(fabs(200));
-    float kd = 2;
-    float ks = 4;
-    float spec_alpha = 2;
+    float kd = 5.0f;
+    float ks = 0.5f;
+    float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(3, 3, 3);
+    Vec3f light_pos(5, 5, -10);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
-    Vec3f eye = rayorig.subtract(poi);  //raydir.negate();
-    Vec3f l = light_pos.subtract(poi);
+    Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+    Vec3f l = poi.subtract(light_pos).normalize();
     Vec3f half = eye.add(l).normalize();
-    Vec3f n = triangle_near->getNormal(poi);
+    Vec3f n = triangle_near->getNormal(poi).normalize();
 
     print_vec3f("eye", eye);
     print_vec3f(" poi", poi);
@@ -217,7 +211,7 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     print_vec3f(" n", n);
 
     Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l.normalize())));
-    Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
+    Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
     Vec3f ambient = Vec3f(50);
 
     print_vec3f(" diffuse", diffuse);
@@ -225,27 +219,24 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
 
 //    std::cout << std::endl;
 
-    return l.normalize().scale(100.0f);
+    //return l.normalize().scale(100.0f);
 
     // debugging
     //  return eye.scale(10.0f);
 
+    return specular;
     // actual
     return diffuse.add(specular).add(ambient);
 
-    // return Vec3f(texture.red, texture.green, texture.blue);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
 
-    int width = 100, height = 100;
+    int width = 1024, height = 1024;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
     float angle = tan(M_PI * 0.5 * fov / 180.);
-
-    // read texture map
-    png::image< png::rgb_pixel > texture_map("texture_map.png");
 
     // Trace rays
     int cnt = 0;
@@ -255,7 +246,7 @@ void render(const std::vector<Triangle*> &triangle_list){
             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, -2);
             raydir.normalize();
-            *pixel = trace(Vec3f(0,0.1,-7), raydir, triangle_list, texture_map);
+            *pixel = trace(Vec3f(0,0,-7), raydir, triangle_list);
         }
         std::cout << y << "\n"; cnt++;
     }
@@ -353,3 +344,4 @@ int clamp(int what, int low, int high)
     if (what > high) return high;
     return what;
 }
+
