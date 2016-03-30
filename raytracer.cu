@@ -92,7 +92,7 @@ typedef Vec3<float> Vec3f;
 
 HD 
 Vec3f reflect(const Vec3f &I, const Vec3f &N){
-	return I.subtract(N.scale(2*I.dotProduct(N)));
+	return I.subtract(N.scale(2*I.dotProduct(N))).negate();
 }
 
 class Triangle{
@@ -191,7 +191,7 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
     float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
     Vec3f raydir(xx, yy, -2);
     raydir.normalize();
-    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size);
+    image[y*WIDTH + x] = trace(Vec3f(0,0.1,-7), raydir, triangle_list,tl_size);
 
 }
 
@@ -228,12 +228,12 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
  
     // Simple blinn phong shading
     Vec3f color(200.0);
-    float kd = 5.0f;
+    float kd = 0.3f;
     float ks = 0.5f;
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(5, 5, -10);
+    Vec3f light_pos(7, 7, -2);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -247,9 +247,9 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     //print_vec3f(" half", half);
     //print_vec3f(" n", n);
 
-    Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
-    Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-    Vec3f ambient = Vec3f(50);
+    Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l)));  //color.scale(kd * std::max(float(0), n.dotProduct(l)));
+    Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));  // color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
+    Vec3f ambient = Vec3f(40.0f);
 
 /*
     print_vec3f(" diffuse", diffuse);
@@ -262,9 +262,9 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     // debugging
     //  return eye.scale(10.0f);
 
-    return specular;
+    // return specular;
     // actual
-    //return diffuse.add(specular).add(ambient);
+    return diffuse.add(specular).add(ambient);
 
 }
 
@@ -283,10 +283,8 @@ void render(const std::vector<Triangle*> &triangle_list){
     float* d_params;
     float h_params[6] = {invWidth, invHeight, fov, aspectratio, angle, tl_size};
 
-    std::cout << "1" << std::endl;
     cudaMalloc(&d_params, 6*sizeof(float));    
     cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
-std::cout << "2" << std::endl;
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
     for(int i = 0;i<tl_size;i++){
@@ -296,13 +294,11 @@ std::cout << "2" << std::endl;
     Triangle* d_triangle_list;
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
-std::cout << "3" << std::endl;
 
     Vec3f *d_image;
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
 
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image);
-std::cout << "4" << std::endl;
     cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
 
 /*
@@ -320,7 +316,7 @@ at yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
         std::cout << y << "\n"; cnt++;
     }*/
     // Save result to a PPM image (keep these flags if you compile under Windows)
-    std::ofstream ofs("./gpu_trial0.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./gpu_trial1.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<

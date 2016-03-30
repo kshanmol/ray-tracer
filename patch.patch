@@ -1,0 +1,117 @@
+diff --cc raytracer.cpp
+index 42770f9,dab2834..0000000
+--- a/raytracer.cpp
++++ b/raytracer.cpp
+@@@ -225,10 -232,9 +232,8 @@@ Vec3f trace(Vec3f rayorig, Vec3f raydir
+  
+  //    std::cout << std::endl;
+  
+-     return l.normalize().scale(100.0f);
+- 
+      // debugging
+-     //  return eye.scale(10.0f);
+ -    // std::cout << "{" << specular.x << " " << specular.y << " " << specular.z << "\n";
++     // return ambient;
+  
+      // actual
+      return diffuse.add(specular).add(ambient);
+diff --git a/Makefile b/Makefile
+index cdea789..7fc8a1c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,9 @@
+ all:
++	nvcc -O3 -c raytracer.cu
++	nvcc  -O3 -o ray_tracer raytracer.o
++	rm -f raytracer.o
++
++cpu:
+ 	g++ -O3 -mssse3 -malign-double -c raytracer.cpp `libpng-config --cflags` -I $PREFIX/include
+ 	g++  -O3 -mssse3 -malign-double -o ray_tracer -lpng12 raytracer.o `libpng-config --ldflags`
+ 	rm -f raytracer.o
+diff --git a/Makefile2lol b/Makefile2lol
+deleted file mode 100644
+index c15556b..0000000
+--- a/Makefile2lol
++++ /dev/null
+@@ -1,15 +0,0 @@
+-
+-all:
+-	nvcc -O3 -c raytracer.cu
+-	nvcc  -O3 -o ray_tracer raytracer.o
+-	rm -f raytracer.o
+-
+-simple:
+-	nvcc -o ray_tracer  -lpng12 raytracer.cu
+-
+-opt:
+-	nvcc -O3 -o ray_tracer -lpng12 raytracer.cu
+-
+-clean:
+-	rm -f ray_tracer raytracer.o
+-
+diff --git a/raytracer.cu b/raytracer.cu
+index ed0b3f4..4b035ba 100644
+--- a/raytracer.cu
++++ b/raytracer.cu
+@@ -83,7 +83,7 @@ public:
+ typedef Vec3<float> Vec3f;
+ 
+ Vec3f reflect(const Vec3f &I, const Vec3f &N){
+-	return I.subtract(N.scale(2*I.dotProduct(N)));
++	return I.subtract(N.scale(2*I.dotProduct(N))).negate();
+ }
+ 
+ class Triangle{
+@@ -191,12 +191,12 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
+  
+     // Simple blinn phong shading
+     Vec3f color(fabs(200));
+-    float kd = 5.0f;
++    float kd = 0.3f;
+     float ks = 0.5f;
+     float spec_alpha = 4;
+ 
+     // assume only 1 light over here.
+-    Vec3f light_pos(5, 5, -10);
++    Vec3f light_pos(7, 7, -2);
+ 
+     Vec3f poi = rayorig.add( raydir.scale(tnear) );
+     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+@@ -210,9 +210,9 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
+     print_vec3f(" half", half);
+     print_vec3f(" n", n);
+ 
+-    Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l.normalize())));
+-    Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
+-    Vec3f ambient = Vec3f(50);
++    Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l)));  //color.scale(kd * std::max(float(0), n.dotProduct(l)));
++    Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));  // color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
++    Vec3f ambient = Vec3f(40.0f);
+ 
+     print_vec3f(" diffuse", diffuse);
+     print_vec3f(" specular", specular);
+@@ -224,7 +224,7 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
+     // debugging
+     //  return eye.scale(10.0f);
+ 
+-    return specular;
++    // return specular;
+     // actual
+     return diffuse.add(specular).add(ambient);
+ 
+@@ -246,12 +246,12 @@ void render(const std::vector<Triangle*> &triangle_list){
+             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
+             Vec3f raydir(xx, yy, -2);
+             raydir.normalize();
+-            *pixel = trace(Vec3f(0,0,-7), raydir, triangle_list);
++            *pixel = trace(Vec3f(0.0, 0.1,-7), raydir, triangle_list);
+         }
+         std::cout << y << "\n"; cnt++;
+     }
+     // Save result to a PPM image (keep these flags if you compile under Windows)
+-    std::ofstream ofs("./trial11.ppm", std::ios::out | std::ios::binary);
++    std::ofstream ofs("./serial_1024_camera.ppm", std::ios::out | std::ios::binary);
+     ofs << "P6\n" << width << " " << height << "\n255\n";
+     for (int i = 0; i < width * height; ++i) {
+         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
