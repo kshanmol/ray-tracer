@@ -251,46 +251,85 @@ void render(const std::vector<Triangle*> &triangle_list){
     float angle = tan(M_PI * 0.5 * fov / 18);
     int tl_size = triangle_list.size();
 
+    //Cuda events for timing data
+    cudaEvent_t c_start, c_stop, t_start, t_stop, k_start, k_stop;
+    cudaEventCreate(&c_start);
+    cudaEventCreate(&c_stop);
+    cudaEventCreate(&t_start);
+    cudaEventCreate(&t_stop);
+    cudaEventCreate(&k_start);
+    cudaEventCreate(&k_stop);
+   
+    float h_params[6] = {invWidth, invHeight, fov, aspectratio, angle, tl_size};
+
+    Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
+    for(int i = 0;i<tl_size;i++)
+        h_triangle_list[i] = *triangle_list[i]; 
+  
+    //Parallel program begins	
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(width/dimBlock.x, height/dimBlock.y);
 
     float* d_params;
-    float h_params[6] = {invWidth, invHeight, fov, aspectratio, angle, tl_size};
-   
-    //Copy parameters needed to set up camera view
-    cudaMalloc(&d_params, 6*sizeof(float));    
-    cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
-
-    Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
-
-    for(int i = 0;i<tl_size;i++)
-	h_triangle_list[i] = *triangle_list[i]; 
- 
-    Triangle* d_triangle_list;
-    //Copy list of triangles
-    cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
-    cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
-
+    Triangle* d_triangle_list;  
     Vec3f *d_image;
+
+    //Copy parameters needed to set up camera view, triangle list
+    cudaMalloc(&d_params, 6*sizeof(float));    
+    cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
 
+    cudaEventRecord(t_start);
+    cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
+
+    cudaEventRecord(k_start);
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image);
+    cudaEventRecord(k_stop);
 
     cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
+    cudaEventRecord(t_stop);
 
-/*
-    // Trace rays - serial program
-    int cnt = 0;
+    //Print timing data
+    cudaEventSynchronize(k_stop);
+    float k_time = 0;
+    cudaEventElapsedTime(&k_time, k_start, k_stop);
+
+    cudaEventSynchronize(t_stop);
+    float t_time = 0;
+    cudaEventElapsedTime(&t_time, t_start, t_stop);
+
+    printf("GPU kernel time(ms): %f\n", k_time);
+    printf("GPU total time(ms): %f\n", t_time);
+
+    cudaFree(d_image);
+    cudaFree(d_triangle_list);
+    cudaFree(d_params);
+
+    //Parallel program ends*/
+
+    /*// Serial program begins
+    cudaEventRecord(c_start);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x, ++pixel) {
             float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, -2);
             raydir.normalize();
-            *pixel = trace(Vec3f(0,0,-7), raydir, triangle_list);
+            *pixel = trace(Vec3f(0,0,-7), raydir, h_triangle_list, tl_size);
         }
-        std::cout << y << "\n"; cnt++;
-    }*/
+        std::cout << y << "\n";
+    }
+    cudaEventRecord(c_stop);
+
+    //Print timing data
+    cudaEventSynchronize(c_stop);
+    float c_time = 0;
+    cudaEventElapsedTime(&c_time, c_start, c_stop);
+
+    printf("CPU total time(ms): %f\n", c_time);
+
+    //Serial program ends*/
 
     //Write output to ppm file
     std::ofstream ofs("./gpu_trial2.ppm", std::ios::out | std::ios::binary);
@@ -305,9 +344,7 @@ void render(const std::vector<Triangle*> &triangle_list){
     //Free memory
     delete [] image;
     free(h_triangle_list);
-    cudaFree(d_image);
-    cudaFree(d_triangle_list);
-    cudaFree(d_params);
+
 }
 
 
