@@ -158,7 +158,7 @@ public:
 
 void print_vec3f(const char *label, const Vec3f &v)
 {
-    std::cout << label << " [" << v.x << "," << v.y << "," << v.z << "]";
+//    std::cout << label << " [" << v.x << "," << v.y << "," << v.z << "]";
 }
 
 Vec3f trace(Vec3f rayorig, Vec3f raydir,
@@ -196,16 +196,16 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     png::rgb_pixel texture = texture_map.get_pixel(u, v);
 
     // Simple blinn phong shading
-    Vec3f color(fabs(100));
+    Vec3f color(fabs(200));
     float kd = 2;
     float ks = 4;
     float spec_alpha = 2;
 
     // assume only 1 light over here.
-    Vec3f light_pos(1.5, 1.5, 1.5);
+    Vec3f light_pos(3, 3, 3);
 
-    Vec3f eye = raydir.negate();
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
+    Vec3f eye = rayorig.subtract(poi);  //raydir.negate();
     Vec3f l = light_pos.subtract(poi);
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near->getNormal(poi);
@@ -216,29 +216,27 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir,
     print_vec3f(" half", half);
     print_vec3f(" n", n);
 
-    // rayorig.negate();
-    // raydir.negate();
-    // Vec3f half = (rayorig.add(raydir)).normalize();
-    // Vec3f normal = triangle_near->getNormal(rayorig.negate().add( raydir.negate().scale(tnear) ));
-
     Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l)));
     Vec3f specular = color.scale(ks * pow(std::max(float(0), n.dotProduct(half)), spec_alpha));
+    Vec3f ambient = Vec3f(50);
 
     print_vec3f(" diffuse", diffuse);
     print_vec3f(" specular", specular);
 
-    std::cout << std::endl;
+//    std::cout << std::endl;
 
-    // return color.scale(kd*std::max(float(0), normal.dotProduct(raydir))).add( color.scale(ks*std::max(float(0), normal.dotProduct(half))));
+    // debugging
+    return eye.scale(10.0f);
 
-    return diffuse.add(specular);
+    // actual
+    return diffuse.add(specular).add(ambient);
 
     // return Vec3f(texture.red, texture.green, texture.blue);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
 
-    int width = 400, height = 400;
+    int width = 100, height = 100;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
