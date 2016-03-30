@@ -7,16 +7,21 @@
 #include <cassert>
 #include <string>
 #include <sstream>
+//#include <png++/png.hpp>
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
 #define WIDTH 1024
 
 static const float eps = 1e-8;
-
-HD double det(double a1, double a2, double a3, double b1, double b2, double b3, double c1, double c2, double c3);
-
+HD
+double det(double a1, double a2, double a3,
+            double b1, double b2, double b3,
+            double c1, double c2, double c3);
 int clamp(int what, int low, int high);
+
+
+
 
 template<typename T>
 class Vec3{
@@ -85,8 +90,9 @@ public:
 
 typedef Vec3<float> Vec3f;
 
-HD Vec3f reflect(const Vec3f &I, const Vec3f &N){
-	return I.subtract(N.scale(2*I.dotProduct(N))).negate();
+HD 
+Vec3f reflect(const Vec3f &I, const Vec3f &N){
+	return I.subtract(N.scale(2*I.dotProduct(N)));
 }
 
 class Triangle{
@@ -105,7 +111,7 @@ public:
         const Vec3f &tv_2) :
         v0(v_0), v1(v_1), v2(v_2),
         tv0(tv_0), tv1(tv_1), tv2(tv_2)
-    { /* empty */ }
+     { /* empty */ }
 
     HD bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
 
@@ -153,6 +159,8 @@ public:
         Vec3f p = point.subtract(v1);
         Vec3f q = v0.subtract(v2);
 
+        // use point here. !!
+
         return Vec3f(
                     p.y * q.z - p.z * q.y,
                     -1 * (p.x*q.z - p.z * q.x),
@@ -161,40 +169,41 @@ public:
     }
 };
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size);
+HD
+Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size);
 
-HD float max_(float a, float b){ return (a < b) ? b : a; }
+HD
+float max_(float a, float b);
 
 __global__
 void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
 
-    //Pixel coordinates
     int x = threadIdx.x + blockIdx.x*blockDim.x;
     int y = threadIdx.y + blockIdx.y*blockDim.y;	
 
-    //Unpack parameters
     float invWidth = params[0], invHeight = params[1];
     float fov = params[2], aspectratio = params[3];
     float angle = params[4];
-    int tl_size = (int) params[5];
+    int tl_size =(int) params[5];
 
-    //http://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-ray-tracing/ray-tracing-practical-example
-
-    //Set up camera view
     float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
     float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
     Vec3f raydir(xx, yy, -2);
     raydir.normalize();
-
-    //Trace ray
     image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size);
 
 }
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
-{
+HD
+float max_(float a, float b){
 
-    //Ray triangle intersection
+   return (a < b) ? b : a;
+
+}
+
+HD
+Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
+{
     float tnear = INFINITY,
           beta = INFINITY,
           gamma = INFINITY;
@@ -218,12 +227,12 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
  
     // Simple blinn phong shading
     Vec3f color(200.0);
-    float kd = 0.3f;
+    float kd = 5.0f;
     float ks = 0.5f;
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(7, 7, -2);
+    Vec3f light_pos(5, 5, -10);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -231,19 +240,35 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near->getNormal(poi).normalize();
 
+    //print_vec3f("eye", eye);
+    //print_vec3f(" poi", poi);
+    //print_vec3f(" l", l);
+    //print_vec3f(" half", half);
+    //print_vec3f(" n", n);
+
     Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-    Vec3f ambient = Vec3f(40.0);
+    Vec3f ambient = Vec3f(50);
 
-    //return specular;
+/*
+    print_vec3f(" diffuse", diffuse);
+    print_vec3f(" specular", specular);
+*/
+//    std::cout << std::endl;
+
+    //return l.normalize().scale(100.0f);
+
+    // debugging
+    //  return eye.scale(10.0f);
+
+    return specular;
     // actual
-    return diffuse.add(specular).add(ambient);
+    //return diffuse.add(specular).add(ambient);
 
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
 
-    //Define image size, calculate camera view parameters
     int width = 1024, height = 1024;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
@@ -256,44 +281,45 @@ void render(const std::vector<Triangle*> &triangle_list){
 
     float* d_params;
     float h_params[6] = {invWidth, invHeight, fov, aspectratio, angle, tl_size};
-   
-    //Copy parameters needed to set up camera view
+
+    std::cout << "1" << std::endl;
     cudaMalloc(&d_params, 6*sizeof(float));    
     cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
+std::cout << "2" << std::endl;
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
-
-    for(int i = 0;i<tl_size;i++)
-	h_triangle_list[i] = *triangle_list[i]; 
+    for(int i = 0;i<tl_size;i++){
+	h_triangle_list[i] = *triangle_list[i];
+    } 
  
     Triangle* d_triangle_list;
-    //Copy list of triangles
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
+std::cout << "3" << std::endl;
 
     Vec3f *d_image;
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
 
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image);
-
+std::cout << "4" << std::endl;
     cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
 
 /*
-    // Trace rays - serial program
+    // Trace rays
     int cnt = 0;
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x, ++pixel) {
             float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
-            float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
+            flo:wq
+at yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, -2);
             raydir.normalize();
             *pixel = trace(Vec3f(0,0,-7), raydir, triangle_list);
         }
         std::cout << y << "\n"; cnt++;
     }*/
-
-    //Write output to ppm file
-    std::ofstream ofs("./gpu_trial2.ppm", std::ios::out | std::ios::binary);
+    // Save result to a PPM image (keep these flags if you compile under Windows)
+    std::ofstream ofs("./gpu_trial0.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
@@ -301,13 +327,7 @@ void render(const std::vector<Triangle*> &triangle_list){
                (unsigned char)(std::min(float(1), image[i].z/255)*255 );
     }
     ofs.close();
-
-    //Free memory
     delete [] image;
-    free(h_triangle_list);
-    cudaFree(d_image);
-    cudaFree(d_triangle_list);
-    cudaFree(d_params);
 }
 
 
@@ -321,28 +341,23 @@ int main(){
     std::vector<Triangle*> triangle_list;
     Triangle* triangle;
 
-    //Reading obj file
     while(getline(objinfile, line)){
 
         std::istringstream iss(line);
         std::string type_;
         iss >> type_;
         std::string fv1, fv2, fv3;
-
-	//Create list of vertices
         if (type_.compare("v") == 0){
 
             double a, b, c;
             iss >> a >> b >> c;
             vertices.push_back(new Vec3f(a, b, c));
         }
-	//Create list of vertex textures
         else if (type_.compare("vt") == 0){
             double a, b;
             iss >> a >> b;
             vertex_textures.push_back(new Vec3f(a, b, 0));
         }
-	//Create list of triangles
         else if (type_.compare("f") == 0){
 
             iss >> fv1 >> fv2 >> fv3;
@@ -374,6 +389,12 @@ int main(){
             triangle_list.push_back(triangle);
         }
     }
+
+    int width = 1024, height = 1024;
+    dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
+    dim3 dimGrid(width/dimBlock.x, height/dimBlock.y);
+
+    
 
     render(triangle_list);
 
