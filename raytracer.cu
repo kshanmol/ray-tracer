@@ -244,7 +244,7 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
     return result_color;
 }
 
-void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_positions, int n_lights){
+void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_positions, int n_lights, const char *f_output){
 
     //Define image size, calculate camera view parameters
     int width = 1024, height = 1024;
@@ -338,7 +338,7 @@ void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_posi
     //Serial program ends*/
 
     //Write output to ppm file
-    std::ofstream ofs("./gpu_trial2.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs(f_output, std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
@@ -355,8 +355,8 @@ void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_posi
 
 int main(int argc, char const *argv[]){
 
-    if (argc != 2){
-        printf("Usage: ./raytacer <modelfile>.obj\n");
+    if (argc != 3){
+        printf("Usage: ./raytacer <modelfile>.obj <output>.ppm\n");
         exit(0);
     }
     std::ifstream objinfile(argv[1]);
@@ -426,12 +426,10 @@ int main(int argc, char const *argv[]){
         Vec3f(7, 7, -2),
         Vec3f(3, 3, 5)
     };
-
     // only works because light_positions is on stack and known at compile time
     int n_lights = sizeof(light_positions)/sizeof(Vec3f);
-    printf("n_lights = %d\n",n_lights);
 
-    render(triangle_list, light_positions, n_lights);
+    render(triangle_list, light_positions, n_lights, argv[2]);
 
     return 0;
 }
