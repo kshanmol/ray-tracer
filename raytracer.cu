@@ -161,7 +161,7 @@ public:
     }
 };
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, Vec3f *lights, int n_lights);
+HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *lights, int n_lights);
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 
@@ -188,19 +188,18 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_position
     raydir.normalize();
 
     //Trace ray
-    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size, light_positions, n_lights);
+    Vec3f view(0,0,-7); // TODO: correct name?
+    image[y*WIDTH + x] = trace(view, raydir, triangle_list,tl_size, light_positions, n_lights);
 
 }
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, Vec3f *light_positions, int n_lights)
-{
-
+HD Triangle *nearest_triangle(Vec3f &rayorig, Vec3f &raydir, Triangle *triangle_list, int tl_size, float &tnear){
     //Ray triangle intersection
-    float tnear = INFINITY,
-          beta = INFINITY,
+    tnear = INFINITY;
+    float beta = INFINITY, // TODO: check if still needed
           gamma = INFINITY;
 
-    const Triangle* triangle_near = NULL;
+    Triangle* triangle_near = NULL;
     for (unsigned int i = 0; i < tl_size; ++i) {
         float t0 = INFINITY,
               beta_ = INFINITY,
@@ -214,6 +213,18 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
             }
         }
     }
+
+    return triangle_near;
+}
+
+HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *light_positions, int n_lights)
+{
+
+    //Ray triangle intersection
+    float tnear = INFINITY;
+
+    const Triangle* triangle_near = nearest_triangle(rayorig, raydir, triangle_list, tl_size, tnear);
+
     if (!triangle_near)
         return Vec3f(0);
 
@@ -227,6 +238,7 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
 
     for(unsigned int i = 0; i < n_lights; i++)
     {
+        // TODO: extremely ineffecient color decision
         color = Vec3f( (i % 3 == 0) ? 200: 0, (i % 3 == 1) ? 200: 0, (i % 3 == 2) ? 200: 0);
 
         Vec3f light = light_positions[i];
