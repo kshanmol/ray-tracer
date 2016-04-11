@@ -95,7 +95,7 @@ public:
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
 
-    HD 
+    HD
     Triangle(
         const Vec3f &v_0,
         const Vec3f &v_1,
@@ -161,22 +161,23 @@ public:
     }
 };
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size);
+HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, Vec3f *lights, int n_lights);
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 
 __global__
-void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
+void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_positions, Vec3f* image){
 
     //Pixel coordinates
     int x = threadIdx.x + blockIdx.x*blockDim.x;
-    int y = threadIdx.y + blockIdx.y*blockDim.y;	
+    int y = threadIdx.y + blockIdx.y*blockDim.y;
 
     //Unpack parameters
     float invWidth = params[0], invHeight = params[1];
     float fov = params[2], aspectratio = params[3];
     float angle = params[4];
     int tl_size = (int) params[5];
+    int n_lights = (int) params[6];
 
     //http://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-ray-tracing/ray-tracing-practical-example
 
@@ -187,11 +188,11 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
     raydir.normalize();
 
     //Trace ray
-    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size);
+    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size, light_positions, n_lights);
 
 }
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
+HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, Vec3f *light_positions, int n_lights)
 {
 
     //Ray triangle intersection
@@ -215,33 +216,35 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
     }
     if (!triangle_near)
         return Vec3f(0);
- 
+
     // Simple blinn phong shading
     Vec3f color(200.0);
     float kd = 0.3f;
     float ks = 0.5f;
     float spec_alpha = 4;
 
-    // assume only 1 light over here.
-    Vec3f light_pos(7, 7, -2);
+    Vec3f result_color(0.0f);
 
-    Vec3f poi = rayorig.add( raydir.scale(tnear) );
-    Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
-    Vec3f l = poi.subtract(light_pos).normalize();
-    Vec3f half = eye.add(l).normalize();
-    Vec3f n = triangle_near->getNormal(poi).normalize();
+    for(unsigned int i = 0; i < n_lights; i++)
+    {
+        Vec3f light = light_positions[i];
+        Vec3f poi = rayorig.add( raydir.scale(tnear) );
+        Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+        Vec3f l = poi.subtract(light).normalize();
+        Vec3f half = eye.add(l).normalize();
+        Vec3f n = triangle_near->getNormal(poi).normalize();
 
-    Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
-    Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
+        Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
+        Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
+        result_color = result_color.add(diffuse).add(specular);
+    }
+
     Vec3f ambient = Vec3f(40.0);
-
-    //return specular;
-    // actual
-    return diffuse.add(specular).add(ambient);
-
+    result_color = result_color.add(ambient);
+    return result_color;
 }
 
-void render(const std::vector<Triangle*> &triangle_list){
+void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_positions, int n_lights){
 
     //Define image size, calculate camera view parameters
     int width = 1024, height = 1024;
@@ -259,35 +262,38 @@ void render(const std::vector<Triangle*> &triangle_list){
     cudaEventCreate(&t_stop);
     cudaEventCreate(&k_start);
     cudaEventCreate(&k_stop);
-   
-    float h_params[6] = {invWidth, invHeight, fov, aspectratio, angle, tl_size};
+
+    float h_params[7] = {invWidth, invHeight, fov, aspectratio, angle, tl_size, n_lights};
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
     for(int i = 0;i<tl_size;i++)
-        h_triangle_list[i] = *triangle_list[i]; 
-  
-    //Parallel program begins	
+        h_triangle_list[i] = *triangle_list[i];
+
+    //Parallel program begins
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(width/dimBlock.x, height/dimBlock.y);
 
     float* d_params;
-    Triangle* d_triangle_list;  
+    Triangle* d_triangle_list;
     Vec3f *d_image;
+    Vec3f *d_light_positions;
 
     //Copy parameters needed to set up camera view, triangle list
-    cudaMalloc(&d_params, 6*sizeof(float));    
+    cudaMalloc(&d_params, 7*sizeof(float));
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
+    cudaMalloc(&d_light_positions, n_lights*sizeof(Vec3f));
 
     cudaEventRecord(t_start);
-    cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_params, h_params, 7*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_light_positions, light_positions, n_lights*sizeof(Vec3f), cudaMemcpyHostToDevice);
 
     cudaEventRecord(k_start);
-    trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image);
+    trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_light_positions, d_image);
     cudaEventRecord(k_stop);
 
-    cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
+    cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);
     cudaEventRecord(t_stop);
 
     //Print timing data
@@ -347,10 +353,13 @@ void render(const std::vector<Triangle*> &triangle_list){
 
 }
 
+int main(int argc, char const *argv[]){
 
-int main(){
-
-    std::ifstream objinfile("input.obj");
+    if (argc != 2){
+        printf("Usage: ./raytacer <modelfile>.obj\n");
+        exit(0);
+    }
+    std::ifstream objinfile(argv[1]);
 
     std::string line;
     std::vector<Vec3f*> vertices;
@@ -412,7 +421,17 @@ int main(){
         }
     }
 
-    render(triangle_list);
+    // point light position coordinates
+    Vec3f light_positions[] = {
+        Vec3f(7, 7, -2),
+        Vec3f(3, 3, 5)
+    };
+
+    // only works because light_positions is on stack and known at compile time
+    int n_lights = sizeof(light_positions)/sizeof(Vec3f);
+    printf("n_lights = %d\n",n_lights);
+
+    render(triangle_list, light_positions, n_lights);
 
     return 0;
 }
