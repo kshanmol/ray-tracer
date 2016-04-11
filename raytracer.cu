@@ -10,7 +10,7 @@
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
-#define WIDTH 2048
+#define WIDTH 1024
 
 static const float eps = 1e-8;
 
@@ -184,11 +184,11 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_position
     //Set up camera view
     float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
     float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
-    Vec3f raydir(xx, yy, -2);
+    Vec3f raydir(xx, yy, 2);
     raydir.normalize();
 
     //Trace ray
-    Vec3f view(0,0,-7); // TODO: correct name?
+    Vec3f view(0,0,7); // TODO: correct name?
     image[y*WIDTH + x] = trace(view, raydir, triangle_list,tl_size, light_positions, n_lights);
 
 }
@@ -243,6 +243,13 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
 
         Vec3f light = light_positions[i];
         Vec3f poi = rayorig.add( raydir.scale(tnear) );
+
+        // checking if its in a shadow region.
+        float tnear_temp;
+        Vec3f shadowRay = light.subtract(poi);
+        nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp);
+
+
         Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
         Vec3f l = poi.subtract(light).normalize();
         Vec3f half = eye.add(l).normalize();
