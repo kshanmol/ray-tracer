@@ -10,7 +10,7 @@
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
-#define WIDTH 1024
+#define WIDTH 2048
 
 static const float eps = 1e-8;
 
@@ -227,6 +227,8 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
 
     for(unsigned int i = 0; i < n_lights; i++)
     {
+        color = Vec3f( (i % 3 == 0) ? 200: 0, (i % 3 == 1) ? 200: 0, (i % 3 == 2) ? 200: 0);
+
         Vec3f light = light_positions[i];
         Vec3f poi = rayorig.add( raydir.scale(tnear) );
         Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -247,7 +249,7 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
 void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_positions, int n_lights, const char *f_output){
 
     //Define image size, calculate camera view parameters
-    int width = 1024, height = 1024;
+    int width = WIDTH, height = WIDTH;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
@@ -424,7 +426,8 @@ int main(int argc, char const *argv[]){
     // point light position coordinates
     Vec3f light_positions[] = {
         Vec3f(7, 7, -2),
-        Vec3f(3, 3, 5)
+        Vec3f(-3, -3, -5),
+        Vec3f(-5, 7, 4)
     };
     // only works because light_positions is on stack and known at compile time
     int n_lights = sizeof(light_positions)/sizeof(Vec3f);
