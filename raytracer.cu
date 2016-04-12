@@ -12,7 +12,7 @@
 #define HD __host__ __device__
 #define WIDTH 1024
 
-static const float eps = 1e-8;
+static const double eps = 1e-4;
 
 HD double det(double a1, double a2, double a3, double b1, double b2, double b3, double c1, double c2, double c3);
 
@@ -193,7 +193,7 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_position
 
 }
 
-HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_list, int tl_size, float &tnear){
+HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_list, int tl_size, float &tnear, bool use_eps=false){
     //Ray triangle intersection
     tnear = INFINITY;
     float beta = INFINITY, // TODO: check if still needed
@@ -206,10 +206,12 @@ HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_li
               gamma_ = INFINITY;
         if (triangle_list[i].rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
             if (t0 < tnear) {
-                tnear = t0;
-                triangle_near = &triangle_list[i];
-                beta = beta_;
-                gamma = gamma_;
+                if( (!use_eps) || (use_eps & t0 > eps) ){
+                    tnear = t0;
+                    triangle_near = &triangle_list[i];
+                    beta = beta_;
+                    gamma = gamma_;
+                }
             }
         }
     }
@@ -235,6 +237,7 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
     float spec_alpha = 4;
 
     Vec3f result_color(0.0f);
+    Vec3f ambient(20.0f);
 
     for(unsigned int i = 0; i < n_lights; i++)
     {
@@ -249,28 +252,19 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         float tnear_temp;
         Vec3f shadowRay = l.negate().normalize();
 
-        Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp);
+        Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp, true);
 
-        if (object_between_light == NULL){
+        if (object_between_light != NULL){
             // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
             // Vec3f half = eye.add(l).normalize();
             Vec3f n = triangle_near->getNormal(poi).normalize();
 
             Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
             Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-            result_color = result_color.add(diffuse).add(specular);
-        }
-
-
-        if (object_between_light != NULL){
-            printf("[%x] ", object_between_light);
-            return Vec3f(0, 255, 0);
+            result_color = result_color.add(diffuse).add(specular).add(ambient);
         }
 
     }
-
-    Vec3f ambient = Vec3f(40.0);
-    result_color = result_color.add(ambient);
     return result_color;
 }
 
@@ -466,10 +460,11 @@ int main(int argc, char const *argv[]){
 
    // adding a ground plane
    // triangle_list.push_back(new Triangle(Vec3f(-3.5, -2, -2), Vec3f(0,1.5, -2), Vec3f(3.5, -2, -2), 0, 0, 0));
+//    triangle_list.push_back(new Triangle(Vec3f(1, -4, -10), Vec3f(1, 4, 0), Vec3f(1, -4, 10), 0, 0, 0));
 
     // point light position coordinates
     Vec3f light_positions[] = {
-//        Vec3f(7, 7, -2),
+        Vec3f(7, 7, -2),
 //        Vec3f(-3, -3, -5),
         Vec3f(10, 0, 0),
 //	Vec3f(-10, 0, 7)
