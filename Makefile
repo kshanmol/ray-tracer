@@ -1,6 +1,6 @@
 all:
-	nvcc -O3 -c raytracer.cu
-	nvcc  -O3 -o ray_tracer raytracer.o
+	nvcc -c -Xptxas -v --maxrregcount=32 raytracer.cu
+	nvcc  -o ray_tracer raytracer.o
 	rm -f raytracer.o
 
 cpu:

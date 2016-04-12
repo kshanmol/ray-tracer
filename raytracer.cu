@@ -193,7 +193,7 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_position
 
 }
 
-HD Triangle *nearest_triangle(Vec3f &rayorig, Vec3f &raydir, Triangle *triangle_list, int tl_size, float &tnear){
+HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_list, int tl_size, float &tnear){
     //Ray triangle intersection
     tnear = INFINITY;
     float beta = INFINITY, // TODO: check if still needed
@@ -243,21 +243,30 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
 
         Vec3f light = light_positions[i];
         Vec3f poi = rayorig.add( raydir.scale(tnear) );
+        Vec3f l = poi.subtract(light).normalize();
 
         // checking if its in a shadow region.
         float tnear_temp;
-        Vec3f shadowRay = light.subtract(poi);
-        nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp);
+        Vec3f shadowRay = l.negate().normalize();
+
+        Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp);
+
+        if (object_between_light == NULL){
+            // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+            // Vec3f half = eye.add(l).normalize();
+            Vec3f n = triangle_near->getNormal(poi).normalize();
+
+            Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
+            Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
+            result_color = result_color.add(diffuse).add(specular);
+        }
 
 
-        Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
-        Vec3f l = poi.subtract(light).normalize();
-        Vec3f half = eye.add(l).normalize();
-        Vec3f n = triangle_near->getNormal(poi).normalize();
+        if (object_between_light != NULL){
+            printf("[%x] ", object_between_light);
+            return Vec3f(0, 255, 0);
+        }
 
-        Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
-        Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-        result_color = result_color.add(diffuse).add(specular);
     }
 
     Vec3f ambient = Vec3f(40.0);
@@ -439,14 +448,31 @@ int main(int argc, char const *argv[]){
                                     *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
 
             triangle_list.push_back(triangle);
+
+
+            // adding a new object
+            Vec3f v11 = *vertices[v1 - 1];
+            Vec3f v22 = *vertices[v2 - 1];
+            Vec3f v33 = *vertices[v3 - 1];
+
+            v11.x = v11.x - 1.5;
+            v22.x = v22.x - 1.5;
+            v33.x = v33.x - 1.5;
+
+            triangle_list.push_back(new Triangle(v11, v22, v33, 0, 0, 0));
+
         }
     }
 
+   // adding a ground plane
+   // triangle_list.push_back(new Triangle(Vec3f(-3.5, -2, -2), Vec3f(0,1.5, -2), Vec3f(3.5, -2, -2), 0, 0, 0));
+
     // point light position coordinates
     Vec3f light_positions[] = {
-        Vec3f(7, 7, -2),
-        Vec3f(-3, -3, -5),
-        Vec3f(-5, 7, 4)
+//        Vec3f(7, 7, -2),
+//        Vec3f(-3, -3, -5),
+        Vec3f(10, 0, 0),
+//	Vec3f(-10, 0, 7)
     };
     // only works because light_positions is on stack and known at compile time
     int n_lights = sizeof(light_positions)/sizeof(Vec3f);
