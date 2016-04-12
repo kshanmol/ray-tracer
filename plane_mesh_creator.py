@@ -66,8 +66,8 @@ for square in squares:
         ))
     faces.append((
         vertices_find[square.A],
-        vertices_find[square.D],
-        vertices_find[square.C]
+        vertices_find[square.C],
+        vertices_find[square.D]
         ))
 
 with open('plane.obj', 'w') as f:
