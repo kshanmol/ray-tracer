@@ -255,12 +255,16 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
     Vec3f result_color(0.0f);
     Vec3f ambient(20.0f);
 
+    Vec3f poi = rayorig.add( raydir.scale(tnear) );
+    Vec3f n = triangle_near->getNormal(poi).normalize();
+
     if(triangle_near->reflective)
     {
         if (depth <= REFLECTION_DEPTH)
         {
-            // TODO: add recursive step here.
-            return Vec3f(0, 0, 255);
+            Vec3f reflected_ray = reflect(rayorig, n);
+            Vec3f reflected_shading = trace(poi, reflected_ray, triangle_list, tl_size, light_positions, n_lights, depth+1);
+            return Vec3f(0, 0, 50).add(reflected_shading);
         }
     }
 
@@ -270,7 +274,6 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         color = Vec3f( (i % 3 == 0) ? 200: 0, (i % 3 == 1) ? 200: 0, (i % 3 == 2) ? 200: 0);
 
         Vec3f light = light_positions[i];
-        Vec3f poi = rayorig.add( raydir.scale(tnear) );
         Vec3f l = poi.subtract(light).normalize();
 
         // checking if its in a shadow region.
@@ -282,8 +285,6 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         if (object_between_light != NULL){
             // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
             // Vec3f half = eye.add(l).normalize();
-            Vec3f n = triangle_near->getNormal(poi).normalize();
-
             Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
             Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
             result_color = result_color.add(diffuse).add(specular).add(ambient);
