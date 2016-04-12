@@ -77,4 +77,4 @@ with open('plane.obj', 'w') as f:
     f.write("vt 0 0\n")
 
     for face in faces:
-        f.write("f %d/0 %d/0 %d/0\n" % face)
+        f.write("f %d/1 %d/1 %d/1\n" % (face[0] + , face[1] + 1, face[2] + 1))
