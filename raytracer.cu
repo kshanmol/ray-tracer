@@ -13,7 +13,7 @@
 #define WIDTH 1024
 #define REFLECTION_DEPTH 1
 
-static const double eps = 1e-6;
+static const double eps = 1e-8;
 
 HD double det(double a1, double a2, double a3, double b1, double b2, double b3, double c1, double c2, double c3);
 
@@ -222,7 +222,7 @@ HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_li
               gamma_ = INFINITY;
         if (triangle_list[i].rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
             if (t0 < tnear) {
-                if( (!use_eps) || (use_eps & t0 > eps) ){
+                if( (!use_eps) || (use_eps && t0 > eps) ){
                     tnear = t0;
                     triangle_near = &triangle_list[i];
                     beta = beta_;
@@ -253,7 +253,7 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
     float spec_alpha = 4;
 
     Vec3f result_color(0.0f);
-    Vec3f ambient(20.0f);
+    Vec3f ambient(10.0f);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f n = triangle_near->getNormal(poi).normalize();
@@ -264,7 +264,7 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         {
             Vec3f reflected_ray = reflect(raydir, n).normalize();
             Vec3f reflected_shading = trace(poi, reflected_ray, triangle_list, tl_size, light_positions, n_lights, depth+1);
-            return Vec3f(0, 0, 0).add(reflected_shading);
+            return Vec3f(0, 0, 100).add(reflected_shading);
         }
     }
 
@@ -279,13 +279,15 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         // checking if its in a shadow region.
         float tnear_temp;
         Vec3f shadowRay = l.negate().normalize();
+        Vec3f poi_epsilon = poi.add(shadowRay.scale(eps));
 
-        Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp, true);
+        Triangle *object_between_light = nearest_triangle(poi_epsilon, shadowRay, triangle_list, tl_size, tnear_temp);
+        // Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp, true);
 
         if (object_between_light != NULL){
             Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
             Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-            result_color = result_color.add(diffuse).add(specular);
+            result_color = result_color.add(diffuse).add(specular).add(ambient);
         }
     }
     return result_color.add(ambient);
