@@ -376,6 +376,7 @@ void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_posi
     free(h_triangle_list);
 
 }
+void load_mesh_into_world(char const *, std::vector<Triangle *> &, Vec3f offset=Vec3f(0, 0, 0));
 
 int main(int argc, char const *argv[]){
 
@@ -383,80 +384,10 @@ int main(int argc, char const *argv[]){
         printf("Usage: ./raytacer <modelfile>.obj <output>.ppm\n");
         exit(0);
     }
-    std::ifstream objinfile(argv[1]);
 
-    std::string line;
-    std::vector<Vec3f*> vertices;
-    std::vector<Vec3f*> vertex_textures;
-    std::vector<Triangle*> triangle_list;
-    Triangle* triangle;
-
-    //Reading obj file
-    while(getline(objinfile, line)){
-
-        std::istringstream iss(line);
-        std::string type_;
-        iss >> type_;
-        std::string fv1, fv2, fv3;
-
-	//Create list of vertices
-        if (type_.compare("v") == 0){
-
-            double a, b, c;
-            iss >> a >> b >> c;
-            vertices.push_back(new Vec3f(a, b, c));
-        }
-	//Create list of vertex textures
-        else if (type_.compare("vt") == 0){
-            double a, b;
-            iss >> a >> b;
-            vertex_textures.push_back(new Vec3f(a, b, 0));
-        }
-	//Create list of triangles
-        else if (type_.compare("f") == 0){
-
-            iss >> fv1 >> fv2 >> fv3;
-            std::stringstream ssfv1(fv1);
-            std::stringstream ssfv2(fv2);
-            std::stringstream ssfv3(fv3);
-
-            int v1, v2, v3;
-            int vt1, vt2, vt3;
-            ssfv1 >> v1;
-            ssfv1.ignore();
-            ssfv1 >> vt1;
-
-            ssfv2 >> v2;
-            ssfv2.ignore();
-            ssfv2 >> vt2;
-
-            ssfv3 >> v3;
-            ssfv3.ignore();
-            ssfv3 >> vt3;
-
-            Vec3f *vertex1 = vertices[v1 - 1];
-            Vec3f *vertex2 = vertices[v2 - 1];
-            Vec3f *vertex3 = vertices[v3 - 1];
-
-            triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
-                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
-
-            triangle_list.push_back(triangle);
-
-
-            // adding a new object
-            Vec3f v11 = *vertices[v1 - 1];
-            Vec3f v22 = *vertices[v2 - 1];
-            Vec3f v33 = *vertices[v3 - 1];
-
-            v11.x = v11.x - 1.5;
-            v22.x = v22.x - 1.5;
-            v33.x = v33.x - 1.5;
-
-            triangle_list.push_back(new Triangle(v11, v22, v33, 0, 0, 0));
-
-        }
-    }
+    std::vector<Triangle *> triangle_list;
+    load_mesh_into_world(argv[1], triangle_list);
+    load_mesh_into_world(argv[1], triangle_list, Vec3f(1.5, 1.5, 1.5));
 
    // adding a ground plane
    // triangle_list.push_back(new Triangle(Vec3f(-3.5, -2, -2), Vec3f(0,1.5, -2), Vec3f(3.5, -2, -2), 0, 0, 0));
@@ -495,3 +426,66 @@ int clamp(int what, int low, int high)
     return what;
 }
 
+void load_mesh_into_world(char const *mesh_filename, std::vector<Triangle *> &triangle_list, Vec3f offset){
+
+    std::ifstream objinfile(mesh_filename);
+
+    std::string line;
+    std::vector<Vec3f*> vertices;
+    std::vector<Vec3f*> vertex_textures;
+    Triangle* triangle;
+
+    //Reading obj file
+    while(getline(objinfile, line)){
+
+        std::istringstream iss(line);
+        std::string type_;
+        iss >> type_;
+        std::string fv1, fv2, fv3;
+
+    //Create list of vertices
+        if (type_.compare("v") == 0){
+
+            double a, b, c;
+            iss >> a >> b >> c;
+            vertices.push_back(new Vec3f(a + offset.x, b + offset.y, c + offset.z));
+        }
+    //Create list of vertex textures
+        else if (type_.compare("vt") == 0){
+            double a, b;
+            iss >> a >> b;
+            vertex_textures.push_back(new Vec3f(a, b, 0));
+        }
+    //Create list of triangles
+        else if (type_.compare("f") == 0){
+
+            iss >> fv1 >> fv2 >> fv3;
+            std::stringstream ssfv1(fv1);
+            std::stringstream ssfv2(fv2);
+            std::stringstream ssfv3(fv3);
+
+            int v1, v2, v3;
+            int vt1, vt2, vt3;
+            ssfv1 >> v1;
+            ssfv1.ignore();
+            ssfv1 >> vt1;
+
+            ssfv2 >> v2;
+            ssfv2.ignore();
+            ssfv2 >> vt2;
+
+            ssfv3 >> v3;
+            ssfv3.ignore();
+            ssfv3 >> vt3;
+
+            Vec3f *vertex1 = vertices[v1 - 1];
+            Vec3f *vertex2 = vertices[v2 - 1];
+            Vec3f *vertex3 = vertices[v3 - 1];
+
+            triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
+                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
+
+            triangle_list.push_back(triangle);
+        }
+    }
+}
