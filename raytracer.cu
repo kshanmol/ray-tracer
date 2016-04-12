@@ -11,6 +11,7 @@
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
 #define WIDTH 1024
+#define REFLECTION_DEPTH 2
 
 static const double eps = 1e-4;
 
@@ -94,6 +95,7 @@ public:
 
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
+    bool reflective;
 
     HD
     Triangle(
@@ -105,6 +107,20 @@ public:
         const Vec3f &tv_2) :
         v0(v_0), v1(v_1), v2(v_2),
         tv0(tv_0), tv1(tv_1), tv2(tv_2)
+    { /* empty */ }
+
+    HD
+    Triangle(
+        const Vec3f &v_0,
+        const Vec3f &v_1,
+        const Vec3f &v_2,
+        const Vec3f &tv_0,
+        const Vec3f &tv_1,
+        const Vec3f &tv_2,
+        const bool reflect_) :
+        v0(v_0), v1(v_1), v2(v_2),
+        tv0(tv_0), tv1(tv_1), tv2(tv_2),
+        reflective(reflect_)
     { /* empty */ }
 
     HD bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
@@ -161,7 +177,7 @@ public:
     }
 };
 
-HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *lights, int n_lights);
+HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *lights, int n_lights, int depth=0);
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 
@@ -219,7 +235,7 @@ HD Triangle *nearest_triangle(Vec3f rayorig, Vec3f raydir, Triangle *triangle_li
     return triangle_near;
 }
 
-HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *light_positions, int n_lights)
+HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_size, Vec3f *light_positions, int n_lights, int depth)
 {
 
     //Ray triangle intersection
@@ -238,6 +254,15 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
 
     Vec3f result_color(0.0f);
     Vec3f ambient(20.0f);
+
+    if(triangle_near->reflective)
+    {
+        if (depth <= REFLECTION_DEPTH)
+        {
+            // TODO: add recursive step here.
+            return Vec3f(0, 0, 255);
+        }
+    }
 
     for(unsigned int i = 0; i < n_lights; i++)
     {
@@ -376,7 +401,7 @@ void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_posi
     free(h_triangle_list);
 
 }
-void load_mesh_into_world(char const *, std::vector<Triangle *> &, Vec3f offset=Vec3f(0, 0, 0));
+void load_mesh_into_world(char const *, std::vector<Triangle *> &, Vec3f offset=Vec3f(0, 0, 0), const bool reflective=false);
 
 int main(int argc, char const *argv[]){
 
@@ -387,7 +412,7 @@ int main(int argc, char const *argv[]){
 
     std::vector<Triangle *> triangle_list;
     load_mesh_into_world(argv[1], triangle_list);
-    load_mesh_into_world(argv[1], triangle_list, Vec3f(1.5, 1.5, 1.5));
+    load_mesh_into_world(argv[1], triangle_list, Vec3f(-1.5, 0, 0), true);
 
    // adding a ground plane
    // triangle_list.push_back(new Triangle(Vec3f(-3.5, -2, -2), Vec3f(0,1.5, -2), Vec3f(3.5, -2, -2), 0, 0, 0));
@@ -426,7 +451,7 @@ int clamp(int what, int low, int high)
     return what;
 }
 
-void load_mesh_into_world(char const *mesh_filename, std::vector<Triangle *> &triangle_list, Vec3f offset){
+void load_mesh_into_world(char const *mesh_filename, std::vector<Triangle *> &triangle_list, Vec3f offset, const bool reflective){
 
     std::ifstream objinfile(mesh_filename);
 
@@ -483,7 +508,8 @@ void load_mesh_into_world(char const *mesh_filename, std::vector<Triangle *> &tr
             Vec3f *vertex3 = vertices[v3 - 1];
 
             triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
-                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
+                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1],
+                                    reflective);
 
             triangle_list.push_back(triangle);
         }
