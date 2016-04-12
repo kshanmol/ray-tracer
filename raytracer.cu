@@ -11,9 +11,9 @@
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
 #define WIDTH 1024
-#define REFLECTION_DEPTH 2
+#define REFLECTION_DEPTH 1
 
-static const double eps = 1e-4;
+static const double eps = 1e-6;
 
 HD double det(double a1, double a2, double a3, double b1, double b2, double b3, double c1, double c2, double c3);
 
@@ -262,9 +262,9 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
     {
         if (depth <= REFLECTION_DEPTH)
         {
-            Vec3f reflected_ray = reflect(rayorig, n);
+            Vec3f reflected_ray = reflect(raydir, n).normalize();
             Vec3f reflected_shading = trace(poi, reflected_ray, triangle_list, tl_size, light_positions, n_lights, depth+1);
-            return Vec3f(0, 0, 50).add(reflected_shading);
+            return Vec3f(0, 0, 0).add(reflected_shading);
         }
     }
 
@@ -283,15 +283,12 @@ HD Vec3f trace(Vec3f &rayorig, Vec3f &raydir, Triangle* triangle_list, int tl_si
         Triangle *object_between_light = nearest_triangle(poi, shadowRay, triangle_list, tl_size, tnear_temp, true);
 
         if (object_between_light != NULL){
-            // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
-            // Vec3f half = eye.add(l).normalize();
             Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
             Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-            result_color = result_color.add(diffuse).add(specular).add(ambient);
+            result_color = result_color.add(diffuse).add(specular);
         }
-
     }
-    return result_color;
+    return result_color.add(ambient);
 }
 
 void render(const std::vector<Triangle*> &triangle_list, const Vec3f *light_positions, int n_lights, const char *f_output){
@@ -412,23 +409,26 @@ int main(int argc, char const *argv[]){
     }
 
     std::vector<Triangle *> triangle_list;
-    load_mesh_into_world(argv[1], triangle_list);
-    load_mesh_into_world(argv[1], triangle_list, Vec3f(-1.5, 0, 0), true);
+    load_mesh_into_world(argv[1], triangle_list, Vec3f(0, 0, 0));
+    // load_mesh_into_world(argv[1], triangle_list, Vec3f(-1.5, 0, 0));
+    // load_mesh_into_world(argv[1], triangle_list, Vec3f(1.5, 0, 0));
 
-   // adding a ground plane
-   // triangle_list.push_back(new Triangle(Vec3f(-3.5, -2, -2), Vec3f(0,1.5, -2), Vec3f(3.5, -2, -2), 0, 0, 0));
-//    triangle_list.push_back(new Triangle(Vec3f(1, -4, -10), Vec3f(1, 4, 0), Vec3f(1, -4, 10), 0, 0, 0));
+
+    // adding a ground plane
+    load_mesh_into_world("plane.obj", triangle_list, Vec3f(0, 0, 0));
 
     // point light position coordinates
     Vec3f light_positions[] = {
         Vec3f(7, 7, -2),
-//        Vec3f(-3, -3, -5),
+        Vec3f(-3, -3, -5),
         Vec3f(10, 0, 0),
-//	Vec3f(-10, 0, 7)
+	Vec3f(-10, 0, 7)
     };
+
     // only works because light_positions is on stack and known at compile time
     int n_lights = sizeof(light_positions)/sizeof(Vec3f);
 
+    printf("Rendering %d triangles...\n", triangle_list.size()); 
     render(triangle_list, light_positions, n_lights, argv[2]);
 
     return 0;
