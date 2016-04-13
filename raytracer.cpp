@@ -351,7 +351,7 @@ public:
 	float width[3], invWidth[3];
 	Voxel **voxels;
 
-	GridAccel(std::vector<Triangle*>& triangle_list);
+	GridAccel(const std::vector<Triangle*>& triangle_list);
 
     boundingBox WorldBound() const;
     bool CanIntersect() const { return true; }
@@ -384,7 +384,7 @@ private:
 
 };
 
-GridAccel::GridAccel(std::vector<Triangle*>& triangle_list){
+GridAccel::GridAccel(const std::vector<Triangle*>& triangle_list){
 
 	triangleList = triangle_list;
 	for(int i=0;i<triangleList.size();i++){
@@ -458,19 +458,6 @@ GridAccel::GridAccel(std::vector<Triangle*>& triangle_list){
     }
 
     //Construction over
-
-    for(int i = 0;i<3;i++)
-    	std::cout << nVoxels[i] << " ";
-	std::cout << "\n";
-
-	int count = 0;
-	for(int i = 0;i<totalVoxels;i++){
-		if(voxels[i])
-			if(voxels[i]->size() > 5)
-				count++;
-	}
-	std::cout << count << "\n";
-
 }
 
 boundingBox GridAccel::WorldBound() const {
@@ -608,7 +595,7 @@ Vec3f trace(Ray ray, Vec3f rayorig, Vec3f raydir,
 
 }
 
-Vec3f fast_trace(Ray& ray, const std::vector<Triangle*> &triangle_list, GridAccel* newGridAccel)
+Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel)
 {
 
 	Intersection* isect;
@@ -645,7 +632,9 @@ Vec3f fast_trace(Ray& ray, const std::vector<Triangle*> &triangle_list, GridAcce
 
 }
 
-void render(const std::vector<Triangle*> &triangle_list, GridAccel* newGridAccel){
+void render(const std::vector<Triangle*> &triangle_list){
+
+    GridAccel* newGridAccel = new GridAccel(triangle_list);
 
     int width = 256, height = 256;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
@@ -661,13 +650,13 @@ void render(const std::vector<Triangle*> &triangle_list, GridAccel* newGridAccel
             Vec3f raydir(xx, yy, 2);
             raydir.normalize();
             Ray ray(Vec3f(0,0.1,-7), raydir, 0);
-            *pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
-            //*pixel = fast_trace(ray, triangle_list, newGridAccel);
+            //*pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
+            *pixel = fast_trace(ray, newGridAccel);
         }
         //std::cout << y << "\n";
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
-    std::ofstream ofs("./start_comp.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./start_blub.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
@@ -681,7 +670,7 @@ void render(const std::vector<Triangle*> &triangle_list, GridAccel* newGridAccel
 
 int main(){
 
-    std::ifstream objinfile("spot_triangulated.obj");
+    std::ifstream objinfile("blub_triangulated.obj");
 
     std::string line;
     std::vector<Vec3f*> vertices;
@@ -738,44 +727,7 @@ int main(){
         }
     }
 
-    double x_max = -INFINITY, x_min = INFINITY, y_max = -INFINITY, y_min = INFINITY, z_max = -INFINITY, z_min = INFINITY;
-
-    for(int i = 0;i<vertices.size();i++){
-    	if(vertices[i]->x > x_max)
-    		x_max = vertices[i]->x;
-       	if(vertices[i]->y > y_max)
-    		y_max = vertices[i]->y;
-       	if(vertices[i]->z > z_max)
-    		z_max = vertices[i]->z;
-       	if(vertices[i]->x < x_min)
-    		x_min = vertices[i]->x;
-       	if(vertices[i]->y < y_min)
-    		y_min = vertices[i]->y;
-       	if(vertices[i]->z < z_min)
-    		z_min = vertices[i]->z;
-    }
-
-    double num_objects = triangle_list.size();
-
-    double x_extent = x_max - x_min, y_extent = y_max - y_min, z_extent = z_max - z_min;
-
-    double max_extent = std::max(x_extent, std::max(y_extent, z_extent));
-
-    double cube_root = 3.0f*powf(num_objects, 1.f/3.f);
-
-    std::cout << x_max << " " << x_min << " " << x_extent << "\n";
-    std::cout << y_max << " " << y_min << " " << y_extent << "\n";
-    std::cout << z_max << " " << z_min << " " << z_extent << "\n";
-
-    std::cout << max_extent << " " << cube_root << "\n";
-
-    GridAccel* newGridAccel = new GridAccel(triangle_list);
-
-    std::cout << newGridAccel->bounds.lowerB << "\n";
-    std::cout << newGridAccel->bounds.upperB << "\n";
-
-
-    render(triangle_list, newGridAccel);
+    render(triangle_list);
 
     return 0;
 }
