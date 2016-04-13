@@ -204,8 +204,8 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f *light_position
     raydir.normalize();
 
     //Trace ray
-    Vec3f view(0,0,7); // TODO: correct name?
-    image[y*WIDTH + x] = trace(view, raydir, triangle_list,tl_size, light_positions, n_lights);
+    Vec3f camera_pos(0,0,7);
+    image[y*WIDTH + x] = trace(camera_pos, raydir, triangle_list,tl_size, light_positions, n_lights);
 
 }
 
@@ -430,7 +430,7 @@ int main(int argc, char const *argv[]){
     // only works because light_positions is on stack and known at compile time
     int n_lights = sizeof(light_positions)/sizeof(Vec3f);
 
-    printf("Rendering %d triangles...\n", triangle_list.size()); 
+    printf("Rendering %d triangles...\n", triangle_list.size());
     render(triangle_list, light_positions, n_lights, argv[2]);
 
     return 0;
