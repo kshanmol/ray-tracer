@@ -613,23 +613,9 @@ Vec3f fast_trace(Ray& ray, const std::vector<Triangle*> &triangle_list, GridAcce
 
 	Intersection* isect;
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
+	global_t = INFINITY;
 
-	bool hitSomething = newGridAccel->Intersect(ray, isect);
-
-    // for (unsigned int i = 0; i < triangle_list.size(); ++i) {
-    //     float t0 = INFINITY,
-    //           beta_ = INFINITY,
-    //           gamma_ = INFINITY;
-    //     if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
-    //         if (t0 < tnear) {
-    //             tnear = t0;
-    //             triangle_near = triangle_list[i];
-    //             beta = beta_;
-    //             gamma = gamma_;
-    //         }
-    //     }
-    // }
-
+	bool hitSomething = newGridAccel->Intersect(ray, isect);    
     if (!hitSomething)
         return Vec3f(0);
 
@@ -675,13 +661,13 @@ void render(const std::vector<Triangle*> &triangle_list, GridAccel* newGridAccel
             Vec3f raydir(xx, yy, 2);
             raydir.normalize();
             Ray ray(Vec3f(0,0.1,-7), raydir, 0);
-            //*pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
-            *pixel = fast_trace(ray, triangle_list, newGridAccel);
+            *pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
+            //*pixel = fast_trace(ray, triangle_list, newGridAccel);
         }
         //std::cout << y << "\n";
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
-    std::ofstream ofs("./start.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./start_comp.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
