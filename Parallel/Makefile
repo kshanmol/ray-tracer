@@ -10,10 +10,9 @@ cpu:
 
 
 simple:
-	g++ -o ray_tracer  -lpng12 raytracer.cpp
-
+	g++ -o ray_tracer raytracer.cpp
 opt:
-	g++ -O3 -o ray_tracer -lpng12 raytracer.cpp
+	g++ -O3 -o ray_tracer raytracer.cpp
 
 clean:
 	rm -f ray_tracer raytracer.o
