@@ -1,28 +1,38 @@
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
 
 struct Voxel{
 
-    unsigned size() const { return triangleList.size(); }
-    Voxel() { }
+    unsigned size() const { return voxelListSize; }
+    Voxel() { ptr = 0; }
     Voxel(Triangle* op) {
-        triangleList.push_back(op);
+
+		ptr = 0;
+        triangleList = (Triangle*)malloc(sizeof(Triangle));
+		triangleList = op;
+		ptr++;
+
     }
 
     void AddPrimitive(Triangle* triangle) {
-        triangleList.push_back(triangle);
+        triangleList[ptr] = *triangle;
+		ptr++;
     }
     bool Intersect(const Ray &ray, Intersection *isect);
 
 
-private:
-	std::vector<Triangle*> triangleList;
+public:
+	Triangle* triangleList;
+	int voxelListSize;
+	int ptr;
 
 };
 
 bool Voxel::Intersect(const Ray &ray, Intersection *isect){
 
     bool hitSomething = false;
-    for (int i = 0; i < triangleList.size(); ++i) {
-        Triangle* prim = triangleList[i];
+    for (int i = 0; i < voxelListSize; ++i) {
+        Triangle* prim = &triangleList[i];
         if (prim->Intersect(ray, isect)){
             hitSomething = true;
         }
@@ -37,13 +47,14 @@ typedef struct Voxel Voxel;
 class GridAccel{
 public:
 	//Grid accel public data
-    std::vector<Triangle*> triangleList;
+    Triangle* triangleList;
+	int tListSize;
 	int nVoxels[3];
 	boundingBox bounds;
 	float width[3], invWidth[3];
 	Voxel **voxels;
 
-	GridAccel(const std::vector<Triangle*>& triangle_list);
+	GridAccel(Triangle* triangle_list, int listSize);
 
     boundingBox WorldBound() const;
     bool CanIntersect() const { return true; }
@@ -76,13 +87,17 @@ private:
 
 };
 
-GridAccel::GridAccel(const std::vector<Triangle*>& triangle_list){
+GridAccel::GridAccel(Triangle* triangle_list, int listSize){
 
+	triangleList = (Triangle*)malloc(sizeof(Triangle)*tListSize);
 	triangleList = triangle_list;
-	for(int i=0;i<triangleList.size();i++){
-		bounds.union_(triangleList[i]->v0);
-		bounds.union_(triangleList[i]->v1);
-		bounds.union_(triangleList[i]->v2);
+	tListSize = listSize;
+
+	for(int i=0;i<tListSize;i++){
+
+		bounds.union_(triangleList[i].v0);
+		bounds.union_(triangleList[i].v1);
+		bounds.union_(triangleList[i].v2);
 	}
 
 	Vec3f diff = bounds.upperB.subtract(bounds.lowerB);
@@ -91,7 +106,7 @@ GridAccel::GridAccel(const std::vector<Triangle*>& triangle_list){
 	int maxAxis = bounds.maxAxis();
 	float maxInvWidth = 1.f/delta[maxAxis];
 
-    float cubeRoot = 3.f * powf(float(triangleList.size()), 1.f/3.f);
+    float cubeRoot = 3.f * powf(float(tListSize), 1.f/3.f);
 
     float voxelsPerUnitDist = cubeRoot * maxInvWidth;
 
@@ -113,15 +128,19 @@ GridAccel::GridAccel(const std::vector<Triangle*>& triangle_list){
 
     memset(voxels, 0, totalVoxels * sizeof(struct Voxel*));
 
+	int voxelTCount[totalVoxels];
+
+	memset(voxelTCount, 0, totalVoxels* sizeof(int));
+
     //add primitives to grid voxels
 
-    for(int i = 0;i<triangleList.size();i++){
+    for(int i = 0;i<tListSize;i++){
     	//Find voxel extent of primitive
 
     	boundingBox* pb = new boundingBox();
-    	pb->union_(triangleList[i]->v0);
-       	pb->union_(triangleList[i]->v1);
-    	pb->union_(triangleList[i]->v2);
+    	pb->union_(triangleList[i].v0);
+       	pb->union_(triangleList[i].v1);
+    	pb->union_(triangleList[i].v2);
 
     	int vmin[3], vmax[3];
 
@@ -137,15 +156,53 @@ GridAccel::GridAccel(const std::vector<Triangle*>& triangle_list){
     			for(int z = vmin[2];z<=vmax[2];z++){
 
     				int index = offset(x,y,z);
-
-    				if(!voxels[index])
-    					voxels[index] = new Voxel(triangleList[i]);
-    				else
-    					voxels[index]->AddPrimitive(triangleList[i]);
+					voxelTCount[index]++;
 
     			}
     		}
     	}
+
+    }
+
+	for(int i = 0;i<totalVoxels;i++){
+	
+		if(voxelTCount[i] != 0){
+
+			voxels[i] = new Voxel();
+			voxels[i]->voxelListSize = voxelTCount[i];
+			voxels[i]->triangleList = (Triangle*)malloc(voxelTCount[i] * sizeof(Triangle));
+		}
+	}
+
+    for(int i = 0;i<tListSize;i++){
+        //Find voxel extent of primitive
+
+        boundingBox* pb = new boundingBox();
+        pb->union_(triangleList[i].v0);
+        pb->union_(triangleList[i].v1);
+        pb->union_(triangleList[i].v2);
+
+        int vmin[3], vmax[3];
+
+        for(int axis = 0;axis < 3;axis++){
+            vmin[axis] = posToVoxel(pb->lowerB, axis);
+            vmax[axis] = posToVoxel(pb->upperB, axis);
+        }
+
+        //Add primitive to overlapping voxels
+
+        for(int x = vmin[0];x<=vmax[0];x++){
+            for(int y = vmin[1];y<=vmax[1];y++){
+                for(int z = vmin[2];z<=vmax[2];z++){
+
+                    int index = offset(x,y,z);
+                 	
+					if(voxelTCount[index] != 0)
+                    	voxels[index]->AddPrimitive(&triangleList[i]);
+
+                }
+            }
+        }
 
     }
 

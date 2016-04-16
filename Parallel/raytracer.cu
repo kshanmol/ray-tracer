@@ -13,160 +13,17 @@
 #define WIDTH 1024
 
 static const float eps = 1e-8;
-
-HD double det(double a1, double a2, double a3, double b1, double b2, double b3, double c1, double c2, double c3);
-
 int clamp(int what, int low, int high);
 
-template<typename T>
-class Vec3{
-public:
+#include "geometry.cuh"
+#include "grid.cuh"
 
-    T x, y, z;
-    //Constructors
-    HD Vec3() : x(T(0)), y(T(0)), z(T(0)) {}
-    HD Vec3(T val) : x(val), y(val), z(val) {}
-    HD Vec3(T xval, T yval, T zval) : x(xval), y(yval), z(zval) {}
-
-    HD Vec3& normalize(){
-        T nor2 = length2();
-        if (nor2 > 0) {
-            T nor_inv = 1 / sqrt(nor2);
-            x *= nor_inv, y *= nor_inv, z *= nor_inv;
-        }
-        return *this;
-    }
-
-    HD T dotProduct(const Vec3<T> &v) const {
-        return x * v.x + y * v.y + z * v.z;
-    }
-
-    HD Vec3<T> crossProduct(const Vec3<T> &v) const {
-
-        T tmpX = y * v.z - z * v.y;
-        T tmpY = z * v.x - x * v.z;
-        T tmpZ = x * v.y - y * v.x;
-        return Vec3<T>(tmpX, tmpY, tmpZ );
-    }
-
-    HD T length2(){
-        return x * x + y * y + z * z;
-    }
-    HD T length(){
-        return sqrt(length2());
-    }
-
-    HD Vec3<T> scale(const T &f) const {
-        return Vec3<T>(x * f, y * f, z * f);
-    }
-
-    HD Vec3<T> multiply(const Vec3<T> &v) const {
-        return Vec3<T>(x * v.x, y * v.y, z * v.z);
-    }
-
-    HD Vec3<T> subtract(const Vec3<T> &v) const {
-        return Vec3<T>(x - v.x, y - v.y, z - v.z);
-    }
-
-    HD Vec3<T> add(const Vec3<T> &v) const {
-        return Vec3<T>(x + v.x, y + v.y, z + v.z);
-    }
-
-    HD Vec3<T> negate() const {
-        return Vec3<T>(-x, -y, -z);
-    }
-
-    //Helper function to format display
-    friend std::ostream & operator << (std::ostream &os, const Vec3<T> &v){
-        os << "(" << v.x << " " << v.y << " " << v.z << ")";
-        return os;
-    }
-};
-
-typedef Vec3<float> Vec3f;
-
-HD Vec3f reflect(const Vec3f &I, const Vec3f &N){
-	return I.subtract(N.scale(2*I.dotProduct(N))).negate();
-}
-
-class Triangle{
-public:
-
-    Vec3f v0, v1, v2;
-    Vec3f tv0, tv1, tv2; // texture coordinates of vertices
-
-    HD 
-    Triangle(
-        const Vec3f &v_0,
-        const Vec3f &v_1,
-        const Vec3f &v_2,
-        const Vec3f &tv_0,
-        const Vec3f &tv_1,
-        const Vec3f &tv_2) :
-        v0(v_0), v1(v_1), v2(v_2),
-        tv0(tv_0), tv1(tv_1), tv2(tv_2)
-    { /* empty */ }
-
-    HD bool rayTriangleIntersect(const Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
-
-        double A = det(
-                    v0.x - v1.x, v0.x - v2.x, dir.x,
-                    v0.y - v1.y, v0.y - v2.y, dir.y,
-                    v0.z - v1.z, v0.z - v2.z, dir.z
-                    );
-
-        double t_ = det(
-                    v0.x - v1.x, v0.x - v2.x, v0.x - orig.x,
-                    v0.y - v1.y, v0.y - v2.y, v0.y - orig.y,
-                    v0.z - v1.z, v0.z - v2.z, v0.z - orig.z
-                    );
-        t_ = t_ / A;
-
-        double beta_ = det(
-                    v0.x - orig.x, v0.x - v2.x, dir.x,
-                    v0.y - orig.y, v0.y - v2.y, dir.y,
-                    v0.z - orig.z, v0.z - v2.z, dir.z
-                    );
-        beta_ = beta_ / A;
-
-        double gamma_ = det(
-                    v0.x - v1.x, v0.x - orig.x, dir.x,
-                    v0.y - v1.y, v0.y - orig.y, dir.y,
-                    v0.z - v1.z, v0.z - orig.z, dir.z
-                    );
-        gamma_ = gamma_ / A;
-
-        if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
-        {
-            t = t_;
-            beta = beta_;
-            gamma = gamma_;
-            return true;
-        }
-        return false;
-
-    }
-
-    HD Vec3f getNormal(Vec3f point) const
-    {
-        // from http://math.stackexchange.com/a/137551
-        Vec3f p = point.subtract(v1);
-        Vec3f q = v0.subtract(v2);
-
-        return Vec3f(
-                    p.y * q.z - p.z * q.y,
-                    -1 * (p.x*q.z - p.z * q.x),
-                    p.x*q.y - p.y*q.x
-                    );
-    }
-};
-
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size);
+HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, GridAccel* d_newGridAccel);
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 
 __global__
-void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
+void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image,GridAccel* d_newGridAccel){
 
     //Pixel coordinates
     int x = threadIdx.x + blockIdx.x*blockDim.x;
@@ -187,11 +44,11 @@ void trace_kernel (float* params, Triangle* triangle_list, Vec3f* image){
     raydir.normalize();
 
     //Trace ray
-    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list,tl_size);
+    image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list, tl_size, d_newGridAccel);
 
 }
 
-HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
+Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size, GridAccel* newGridAccel)
 {
 
     //Ray triangle intersection
@@ -241,7 +98,9 @@ HD Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size
 
 }
 
-void render(const std::vector<Triangle*> &triangle_list){
+void render(std::vector<Triangle*> &triangle_list){
+
+	//GridAccel* newGridAccel = new GridAccel(triangle_list);
 
     //Define image size, calculate camera view parameters
     int width = 1024, height = 1024;
@@ -264,8 +123,17 @@ void render(const std::vector<Triangle*> &triangle_list){
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
     for(int i = 0;i<tl_size;i++)
-        h_triangle_list[i] = *triangle_list[i]; 
-  
+        h_triangle_list[i] = *triangle_list[i];
+
+    GridAccel* newGridAccel = new GridAccel(h_triangle_list, tl_size);
+	GridAccel* h_newGridAccel = new GridAccel(h_triangle_list, tl_size);	
+
+	int totalVoxels = 1;
+	for(int i=0;i<3;i++)
+		totalVoxels *= newGridAccel->nVoxels[i];
+
+    Voxel** h_voxels = (Voxel**)malloc(sizeof(Voxel*)*totalVoxels);
+
     //Parallel program begins	
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(width/dimBlock.x, height/dimBlock.y);
@@ -273,18 +141,58 @@ void render(const std::vector<Triangle*> &triangle_list){
     float* d_params;
     Triangle* d_triangle_list;  
     Vec3f *d_image;
-
+	GridAccel* d_newGridAccel;
+	Voxel** d_voxels;
+	
     //Copy parameters needed to set up camera view, triangle list
     cudaMalloc(&d_params, 6*sizeof(float));    
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
+	cudaMalloc(&d_voxels, totalVoxels*sizeof(Voxel*));
+
+	
+	// Uncommenting the following causes a seg fault on iteration number 878
+	/*int cnt = 0;
+
+	for(int i = 0;i<totalVoxels;i++){
+
+        if(newGridAccel->voxels[i] != NULL){
+
+			Voxel* d_voxel_elem;
+            cudaMalloc(&d_voxel_elem, sizeof(Voxel));
+			cudaMemcpy(d_voxel_elem, newGridAccel->voxels[i], sizeof(Voxel), cudaMemcpyHostToDevice);
+		
+			Triangle* voxel_triangle_list;
+           	cudaMalloc(&voxel_triangle_list, newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle));
+			cudaMemcpy(voxel_triangle_list, newGridAccel->voxels[i]->triangleList, newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle), cudaMemcpyHostToDevice); 
+			
+			h_voxels[i] = d_voxel_elem;
+			h_voxels[i]->triangleList = (Triangle*)malloc(newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle));
+			h_voxels[i]->triangleList = voxel_triangle_list;
+
+			cudaFree(d_voxel_elem);
+			cudaFree(voxel_triangle_list);
+        }
+		cnt++;
+    }*/
+
+    cudaMemcpy(d_voxels, h_voxels, totalVoxels*sizeof(Voxel*), cudaMemcpyHostToDevice);
+
+    //Allocate memory for GridAccel
+    cudaMalloc((void **)&d_newGridAccel, sizeof(GridAccel));
+    newGridAccel->triangleList = d_triangle_list;
+    newGridAccel->voxels = d_voxels;
 
     cudaEventRecord(t_start);
     cudaMemcpy(d_params, h_params, 6*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
+	
+	//Copy GridAccel
+	cudaMemcpy(d_newGridAccel, newGridAccel, sizeof(GridAccel), cudaMemcpyHostToDevice);
+   
 
-    cudaEventRecord(k_start);
-    trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image);
+	cudaEventRecord(k_start);
+    trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_triangle_list, d_image, d_newGridAccel);
     cudaEventRecord(k_stop);
 
     cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
@@ -350,7 +258,7 @@ void render(const std::vector<Triangle*> &triangle_list){
 
 int main(){
 
-    std::ifstream objinfile("input.obj");
+    std::ifstream objinfile("spot_triangulated.obj");
 
     std::string line;
     std::vector<Vec3f*> vertices;

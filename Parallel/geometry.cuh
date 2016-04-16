@@ -1,12 +1,13 @@
+#define HD __host__ __device__
 
-double det(double a1, double a2, double a3,
+HD double det(double a1, double a2, double a3,
             double b1, double b2, double b3,
             double c1, double c2, double c3);
 
 class Triangle;
 
-float global_t = INFINITY;
-Triangle* global_triangle_near = NULL;
+__device__ float global_t = INFINITY;
+__device__ Triangle* global_triangle_near = NULL;
 
 template<typename T>
 class Vec3{
@@ -14,11 +15,11 @@ public:
 
     T x, y, z;
     //Constructors
-    Vec3() : x(T(0)), y(T(0)), z(T(0)) {}
-    Vec3(T val) : x(val), y(val), z(val) {}
-    Vec3(T xval, T yval, T zval) : x(xval), y(yval), z(zval) {}
+    HD Vec3() : x(T(0)), y(T(0)), z(T(0)) {}
+    HD Vec3(T val) : x(val), y(val), z(val) {}
+    HD Vec3(T xval, T yval, T zval) : x(xval), y(yval), z(zval) {}
 
-    Vec3& normalize(){
+    HD Vec3& normalize(){
         T nor2 = length2();
         if (nor2 > 0) {
             T nor_inv = 1 / sqrt(nor2);
@@ -27,11 +28,11 @@ public:
         return *this;
     }
 
-    T dotProduct(const Vec3<T> &v) const {
+    HD T dotProduct(const Vec3<T> &v) const {
         return x * v.x + y * v.y + z * v.z;
     }
 
-    Vec3<T> crossProduct(const Vec3<T> &v) const {
+    HD Vec3<T> crossProduct(const Vec3<T> &v) const {
 
         T tmpX = y * v.z - z * v.y;
         T tmpY = z * v.x - x * v.z;
@@ -39,30 +40,30 @@ public:
         return Vec3<T>(tmpX, tmpY, tmpZ );
     }
 
-    T length2(){
+    HD T length2(){
         return x * x + y * y + z * z;
     }
-    T length(){
+    HD T length(){
         return sqrt(length2());
     }
 
-    Vec3<T> scale(const T &f) const {
+    HD Vec3<T> scale(const T &f) const {
         return Vec3<T>(x * f, y * f, z * f);
     }
 
-    Vec3<T> multiply(const Vec3<T> &v) const {
+    HD Vec3<T> multiply(const Vec3<T> &v) const {
         return Vec3<T>(x * v.x, y * v.y, z * v.z);
     }
 
-    Vec3<T> subtract(const Vec3<T> &v) const {
+    HD Vec3<T> subtract(const Vec3<T> &v) const {
         return Vec3<T>(x - v.x, y - v.y, z - v.z);
     }
 
-    Vec3<T> add(const Vec3<T> &v) const {
+    HD Vec3<T> add(const Vec3<T> &v) const {
         return Vec3<T>(x + v.x, y + v.y, z + v.z);
     }
 
-    Vec3<T> negate() const {
+    HD Vec3<T> negate() const {
         return Vec3<T>(-x, -y, -z);
     }
 
@@ -75,18 +76,22 @@ public:
 
 typedef Vec3<float> Vec3f;
 
+HD Vec3f reflect(const Vec3f &I, const Vec3f &N){
+    return I.subtract(N.scale(2*I.dotProduct(N))).negate();
+}
+
 class Ray{
 
 public:
 
 	//Methods
-    Ray() : mint(0.f), maxt(INFINITY), depth(0) { }
-    Ray(const Vec3f &origin, const Vec3f &direction, float start, float end = INFINITY, int d = 0)
+    HD Ray() : mint(0.f), maxt(INFINITY), depth(0) { }
+    HD Ray(const Vec3f &origin, const Vec3f &direction, float start, float end = INFINITY, int d = 0)
         : orig(origin), raydir(direction), mint(start), maxt(end), depth(d) { }
-    Ray(const Vec3f &origin, const Vec3f &direction, const Ray &parent, float start, float end = INFINITY)
+    HD Ray(const Vec3f &origin, const Vec3f &direction, const Ray &parent, float start, float end = INFINITY)
         : orig(origin), raydir(direction), mint(start), maxt(end), depth(parent.depth+1) { }
 
-	Vec3f operator()(float t) const { return orig.add(raydir.scale(t)); }
+	HD Vec3f operator()(float t) const { return orig.add(raydir.scale(t)); }
 
 	//Data
 	Vec3f orig;
@@ -104,7 +109,7 @@ public:
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
 
-     Triangle(
+    HD Triangle(
         const Vec3f &v_0,
         const Vec3f &v_1,
         const Vec3f &v_2,
@@ -115,9 +120,7 @@ public:
         tv0(tv_0), tv1(tv_1), tv2(tv_2)
      { /* empty */ }
 
-    //Not our stuff yet.
-
-    bool Intersect(const Ray& ray, Intersection *isect) const{
+    HD bool Intersect(const Ray& ray, Intersection *isect) const{
 
     	Vec3f orig = ray.orig, dir = ray.raydir;
 
@@ -160,7 +163,7 @@ public:
 
     }
 
-    bool rayTriangleIntersect(Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
+    HD bool rayTriangleIntersect(Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
 
         double A = det(
                     v0.x - v1.x, v0.x - v2.x, dir.x,
@@ -200,7 +203,7 @@ public:
 
     }
 
-    Vec3f getNormal(Vec3f point) const
+    HD Vec3f getNormal(Vec3f point) const
     {
         // from http://math.stackexchange.com/a/137551
         Vec3f p = point.subtract(v1);
