@@ -1,4 +1,6 @@
 
+static const float eps = 1e-1;
+
 double det(double a1, double a2, double a3,
             double b1, double b2, double b3,
             double c1, double c2, double c3);
@@ -79,24 +81,28 @@ class Ray{
 
 public:
 
-	//Methods
+    //Methods
     Ray() : mint(0.f), maxt(INFINITY), depth(0) { }
     Ray(const Vec3f &origin, const Vec3f &direction, float start, float end = INFINITY, int d = 0)
         : orig(origin), raydir(direction), mint(start), maxt(end), depth(d) { }
     Ray(const Vec3f &origin, const Vec3f &direction, const Ray &parent, float start, float end = INFINITY)
         : orig(origin), raydir(direction), mint(start), maxt(end), depth(parent.depth+1) { }
 
-	Vec3f operator()(float t) const { return orig.add(raydir.scale(t)); }
+    Vec3f operator()(float t) const { return orig.add(raydir.scale(t)); }
 
-	//Data
-	Vec3f orig;
-	Vec3f raydir;
-	mutable float maxt, mint;
-	int depth;
+    //Data
+    Vec3f orig;
+    Vec3f raydir;
+    mutable float maxt, mint;
+    int depth;
 
 };
 
-struct Intersection;
+struct Intersection{
+    bool use_eps;
+};
+
+typedef struct Intersection Intersection;
 
 class Triangle{
 public:
@@ -124,9 +130,9 @@ public:
 
     bool Intersect(const Ray& ray, Intersection *isect) const{
 
-    	Vec3f orig = ray.orig, dir = ray.raydir;
+        Vec3f orig = ray.orig, dir = ray.raydir;
 
- 		double A = det(
+        double A = det(
                     v0.x - v1.x, v0.x - v2.x, dir.x,
                     v0.y - v1.y, v0.y - v2.y, dir.y,
                     v0.z - v1.z, v0.z - v2.z, dir.z
@@ -155,9 +161,14 @@ public:
 
         if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
         {
-            if(t_ < global_t){
-            	global_t = t_;
-            	global_triangle_near = (Triangle*)this;
+            if(t_ < global_t)
+            {
+                bool use_eps = isect == NULL ? false : isect->use_eps;
+                if (!use_eps || (use_eps && t_ > eps))
+                {
+                    global_t = t_;
+                    global_triangle_near = (Triangle*)this;
+                }
             }
             return true;
         }
@@ -217,7 +228,15 @@ public:
                     p.y * q.z - p.z * q.y,
                     -1 * (p.x*q.z - p.z * q.x),
                     p.x*q.y - p.y*q.x
-                    );
+                    ).negate();
+    }
+
+    Vec3f getNormalMod() const
+    {
+        // crossProduct(vertexA-vertexB, vertexC-vertexA)
+        Vec3f ab = v0.subtract(v1);
+        Vec3f ca = v2.subtract(v0);
+        return ab.crossProduct(ca);
     }
 };
 

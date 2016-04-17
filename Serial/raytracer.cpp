@@ -9,18 +9,10 @@
 #include <string>
 #include <sstream>
 
-static const float eps = 1e-8;
 int clamp(int what, int low, int high);
 
 #include "geometry.h"
 #include "grid.h"
-
-struct Intersection{
-
-
-};
-
-typedef struct Intersection Intersection;
 
 Vec3f reflect(const Vec3f &I, const Vec3f &N){
         return I.subtract(N.scale(2*I.dotProduct(N))).negate();
@@ -53,7 +45,7 @@ Vec3f trace(Ray ray, Vec3f rayorig, Vec3f raydir,
     // Simple blinn phong shading
     Vec3f color(200.0);
     float kd = 0.3f;
-    float ks = 0.5f;
+    float ks = 20.0f;
     float spec_alpha = 4;
 
     // assume only 1 light over here.
@@ -78,38 +70,51 @@ Vec3f trace(Ray ray, Vec3f rayorig, Vec3f raydir,
 
 Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel)
 {
-
-	Intersection* isect;
+	Intersection* isect = new Intersection();
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
 	global_t = INFINITY;
 
 	bool hitSomething = newGridAccel->Intersect(ray, isect);
     if (!hitSomething)
-        return Vec3f(0);
+        return Vec3f(0); // background colour.
 
     // Simple blinn phong shading
     Vec3f color = global_triangle_near->material;
-    float kd = 0.3f;
-    float ks = 0.5f;
+    float kd = 2.0f;
+    float ks = 500000000000.0f;
+    float ka = 0.2f;
     float spec_alpha = 4;
+    Vec3f light_pos(5, -5, 2);
+    float light_intensity = 255;
+    float shadow_scale = 0.1;
+
+    // blinn phong
+    Vec3f poi = rayorig.add( raydir.scale(global_t) );
+    Vec3f v = raydir.negate().normalize();
+    Vec3f l = light_pos.subtract(poi).normalize();
+    Vec3f h = v.add(l);
+    Vec3f normal = global_triangle_near->getNormalMod();
+
+    Vec3f diffuse = color.scale(kd * std::max(float(0), normal.dotProduct(l))).scale(light_intensity);
+    Vec3f specular = color.scale(ks * pow(std::max(float(0), normal.dotProduct(h)), spec_alpha)).scale(light_intensity);
+    Vec3f ambient = color.scale(ka);
+
+    color = specular.add(diffuse);
+
+
+    // shadow
+    Vec3f shadow_dir = light_pos.subtract(poi).negate().normalize();
+    Ray shadow_ray(poi, shadow_dir, eps);
+
+    isect->use_eps = true;
+    hitSomething = newGridAccel->Intersect(shadow_ray, isect);
+    if (hitSomething)
+        color = color.scale(shadow_scale);
+    isect->use_eps = false;
+
 
     // assume only 1 light over here.
-    Vec3f light_pos(5, 5, -2);
-
-    Vec3f poi = rayorig.add( raydir.scale(global_t) );
-    Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
-    Vec3f l = light_pos.subtract(poi).normalize();
-    Vec3f half = eye.add(l).normalize();
-    Vec3f n = global_triangle_near->getNormal(poi).normalize();
-
-
-    Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l.normalize())));
-    Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-    Vec3f ambient = Vec3f(40.0f);
-
-    // actual
-    return diffuse.add(specular).add(ambient);
-
+    return color.add(ambient);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
@@ -188,6 +193,7 @@ int main(){
     std::vector<Triangle*> triangle_list;
 
     load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0));
+    load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(1.5, 0, 0));
     render(triangle_list);
 
     return 0;
