@@ -103,6 +103,8 @@ public:
 
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
+    bool reflective;
+    Vec3f material;
 
      Triangle(
         const Vec3f &v_0,
@@ -110,9 +112,12 @@ public:
         const Vec3f &v_2,
         const Vec3f &tv_0,
         const Vec3f &tv_1,
-        const Vec3f &tv_2) :
+        const Vec3f &tv_2,
+        const bool reflect_,
+        const Vec3f mat) :
         v0(v_0), v1(v_1), v2(v_2),
-        tv0(tv_0), tv1(tv_1), tv2(tv_2)
+        tv0(tv_0), tv1(tv_1), tv2(tv_2),
+        reflective(reflect_), material(mat)
      { /* empty */ }
 
     //Not our stuff yet.
@@ -221,7 +226,7 @@ class boundingBox{
 
 public:
     //public data
-    Vec3f lowerB, upperB; 
+    Vec3f lowerB, upperB;
 
     //public methods
     void union_(const Vec3f& vert);
