@@ -76,14 +76,14 @@ Vec3f trace(Ray ray, Vec3f rayorig, Vec3f raydir,
 
 }
 
-Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel)
+Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread)
 {
 
 	Intersection* isect;
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
 	global_t = INFINITY;
 
-	bool hitSomething = newGridAccel->Intersect(ray, isect);    
+	bool hitSomething = newGridAccel->Intersect(ray, isect, isDebugThread);    
     if (!hitSomething)
         return Vec3f(0);
 
@@ -117,11 +117,11 @@ void render(const std::vector<Triangle*> &triangle_list){
 
     GridAccel* newGridAccel = new GridAccel(triangle_list);
 
-    int width = 1024, height = 1024;
+    int width = 64, height = 64;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
     float invWidth = 1 / float(width), invHeight = 1 / float(height);
     float fov = 30, aspectratio = width / float(height);
-    float angle = tan(M_PI * 0.5 * fov / 180.0);
+    float angle = tan(M_PI * 0.5 * fov / 18);
 
     // Trace rays
     for (int y = 0; y < height; ++y) {
@@ -130,14 +130,14 @@ void render(const std::vector<Triangle*> &triangle_list){
             float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
             Vec3f raydir(xx, yy, 2);
             raydir.normalize();
-            Ray ray(Vec3f(0,0.1,-7), raydir, 0);
+            Ray ray(Vec3f(0,0,-7), raydir, 0);
             //*pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
-            *pixel = fast_trace(ray, newGridAccel);
+            *pixel = fast_trace(ray, newGridAccel, x == 32 && y == 32);
         }
         //std::cout << y << "\n";
     }
     // Save result to a PPM image (keep these flags if you compile under Windows)
-    std::ofstream ofs("./test.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./test1.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<

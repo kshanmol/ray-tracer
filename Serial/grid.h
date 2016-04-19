@@ -50,7 +50,7 @@ public:
     ~GridAccel();
 
 
-	bool Intersect(const Ray &ray, Intersection *isect) const;
+	bool Intersect(const Ray &ray, Intersection *isect, int isDebugThread) const;
 
 	bool IntersectP(const Ray &ray) const;	
 
@@ -163,15 +163,15 @@ GridAccel::~GridAccel() {
     free(voxels);
 }
 
-//copied 
-bool GridAccel::Intersect(const Ray& ray, Intersection *isect ) const{
+//From pbr
+bool GridAccel::Intersect(const Ray& ray, Intersection *isect, int isDebugThread ) const{
 
 	//Check ray against overall grid bounds
 	float rayT;
 
 	if(bounds.Inside(ray(ray.mint)))
 		rayT = ray.mint;
-	else if (!bounds.Intersect(ray, &rayT))
+	else if (!bounds.Intersect(ray, isDebugThread, &rayT))
 		return false;
 
 	Vec3f gridIntersect = ray(rayT);

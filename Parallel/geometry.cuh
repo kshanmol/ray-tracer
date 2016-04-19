@@ -6,9 +6,6 @@ HD double det(double a1, double a2, double a3,
 
 class Triangle;
 
-__device__ float global_t = INFINITY;
-__device__ Triangle* global_triangle_near = NULL;
-
 template<typename T>
 class Vec3{
 public:
@@ -109,6 +106,8 @@ public:
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
 
+	HD Triangle(){};
+
     HD Triangle(
         const Vec3f &v_0,
         const Vec3f &v_1,
@@ -120,7 +119,9 @@ public:
         tv0(tv_0), tv1(tv_1), tv2(tv_2)
      { /* empty */ }
 
-    HD bool Intersect(const Ray& ray, Intersection *isect) const{
+    HD bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, float& t_min) const{
+
+		//printf("HERE WITHOUT YOU BABE\n");
 
     	Vec3f orig = ray.orig, dir = ray.raydir;
 
@@ -153,9 +154,9 @@ public:
 
         if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
         {
-            if(t_ < global_t){
-            	global_t = t_;
-            	global_triangle_near = (Triangle*)this;
+            if(t_ < t_min){
+            	t_min = t_;
+            	triangle_near = *this;
             }
             return true;
         }
@@ -227,32 +228,32 @@ public:
     Vec3f lowerB, upperB; 
 
     //public methods
-    void union_(const Vec3f& vert);
-    int maxAxis();
-    boundingBox();
-    bool Inside(const Vec3f& pt) const;
-    bool Intersect(const Ray &ray, float *hitt0 = NULL, float *hitt1 = NULL) const;
+    HD void union_(const Vec3f& vert);
+    HD int maxAxis();
+    HD boundingBox();
+    HD bool Inside(const Vec3f& pt) const;
+    HD bool Intersect(const Ray &ray, int isDebugThread, float *hitt0 = NULL, float *hitt1 = NULL) const;
 
 };
 
-boundingBox::boundingBox(void){
+HD boundingBox::boundingBox(void){
     lowerB = Vec3f(INFINITY, INFINITY, INFINITY);
     upperB = Vec3f(-INFINITY, -INFINITY, -INFINITY);
 }
 
-void boundingBox::union_(const Vec3f& vert){
+HD void boundingBox::union_(const Vec3f& vert){
 
-    upperB.x = std::max(vert.x, upperB.x);
-    upperB.y = std::max(vert.y, upperB.y);
-    upperB.z = std::max(vert.z, upperB.z);
+    upperB.x = max_(vert.x, upperB.x);
+    upperB.y = max_(vert.y, upperB.y);
+    upperB.z = max_(vert.z, upperB.z);
 
-    lowerB.x = std::min(vert.x, lowerB.x);
-    lowerB.y = std::min(vert.y, lowerB.y);
-    lowerB.z = std::min(vert.z, lowerB.z);
+    lowerB.x = min_(vert.x, lowerB.x);
+    lowerB.y = min_(vert.y, lowerB.y);
+    lowerB.z = min_(vert.z, lowerB.z);
 
 }
 
-int boundingBox::maxAxis(){
+HD int boundingBox::maxAxis(){
 
     int axis = ( upperB.x - lowerB.x > upperB.y - lowerB.y ) ? 0 : 1;
     if(axis)
@@ -263,11 +264,15 @@ int boundingBox::maxAxis(){
     return axis;
 }
 
-bool boundingBox::Inside(const Vec3f &pt) const {
+HD bool boundingBox::Inside(const Vec3f &pt) const {
     return (pt.x >= lowerB.x && pt.x <= upperB.x && pt.y >= lowerB.y && pt.y <= upperB.y && pt.z >= lowerB.z && pt.z <= upperB.z);
 }
 
-bool boundingBox::Intersect(const Ray &ray, float *hitt0 , float *hitt1 ) const {
+HD inline void debug(Vec3f v){
+	printf("%f %f %f\n", v.x, v.y, v.z);
+}
+
+bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , float *hitt1) const {
 
     float t0 = ray.mint, t1 = ray.maxt;
 
@@ -276,6 +281,13 @@ bool boundingBox::Intersect(const Ray &ray, float *hitt0 , float *hitt1 ) const 
     float ray_orig[3] = {ray.orig.x, ray.orig.y, ray.orig.z};
     float ray_dir[3] = {ray.raydir.x, ray.raydir.y, ray.raydir.z};
 
+	if(isDebugThread){
+		debug(lowerB);
+		debug(upperB);
+		debug(ray.orig);
+		debug(ray.raydir);
+	}
+
     for (int i = 0; i < 3; ++i) {
         // Update interval for _i_th bounding box slab
         float invRayDir = 1.f / ray_dir[i];
@@ -283,7 +295,12 @@ bool boundingBox::Intersect(const Ray &ray, float *hitt0 , float *hitt1 ) const 
         float tFar  = (maxB[i] - ray_orig[i]) * invRayDir;
 
         // Update parametric interval from slab intersections
-        if (tNear > tFar) std::swap(tNear, tFar);
+
+        if (tNear > tFar){
+			float temp = tNear;
+			tNear = tFar;
+			tFar = temp;	
+		};
         t0 = tNear > t0 ? tNear : t0;
         t1 = tFar  < t1 ? tFar  : t1;
         if (t0 > t1) return false;
