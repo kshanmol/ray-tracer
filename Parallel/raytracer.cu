@@ -13,7 +13,7 @@
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
-#define WIDTH 1024
+#define WIDTH 512
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 HD float min_(float a, float b){ return (a > b) ? b : a ;} 
@@ -39,7 +39,6 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
     float angle = params[4];
     int tl_size = (int) params[5];
 
-
 	//Unpack new parameters
 	float width = params[6], height = params[7];
 	float focal_distance = params[8];
@@ -58,24 +57,11 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
 
     Ray ray(camerapos, dir, 0);
 
-
-	//if(x == 0)
-	//	if(d_newGridAccel->voxels[878]->voxelListSize != 1)
-	//		printf("AW HELL NO\n");
-
     //http://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-ray-tracing/ray-tracing-practical-example
 
-    //Set up camera view
-    /*float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
-    float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
-    Vec3f raydir(xx, yy, 2);
-    raydir.normalize();
-
-	Ray ray(Vec3f(0,0,-7), raydir, 0);*/
-
     //Trace ray
-    //image[y*WIDTH + x] = trace(Vec3f(0,0,-7), raydir, triangle_list, tl_size);
-	image[y*WIDTH + x] = fast_trace(ray, d_newGridAccel, x == 32  && y == 32);	
+    //image[y*WIDTH + x] = trace(camerapos, dir, triangle_list, tl_size);
+	image[y*WIDTH + x] = fast_trace(ray, d_newGridAccel, x == 275  && y == 240);	
 
 }
 
@@ -88,16 +74,13 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
           gamma = INFINITY;
 
     const Triangle* triangle_near = NULL;
-	printf("%d\n", tl_size);
     for (unsigned int i = 0; i < tl_size; ++i) {
         float t0 = INFINITY,
               beta_ = INFINITY,
               gamma_ = INFINITY;
         if (triangle_list[i].rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
 
-			printf("GOOD BRO\n");
             if (t0 < tnear) {
-				printf("GREAT BRO\n");
                 tnear = t0;
                 triangle_near = &triangle_list[i];
                 beta = beta_;
@@ -106,11 +89,8 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
         }
     }
     if (!triangle_near){
-		printf("WTF BRO\n");
         return Vec3f(0);
 	}
-
-	printf("EXCELLENT BRO\n");
  
     // Simple blinn phong shading
     Vec3f color(200.0);
@@ -137,44 +117,20 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
 
 }
 
-
-Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread)
-{
-
-	//return ray.raydir.scale(5);
+Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 
 	Intersection* isect;
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
 	
-	Triangle triangle_near(Vec3f(42), Vec3f(42), Vec3f(42),Vec3f(42),Vec3f(42),Vec3f(42));
-	float t0 = INFINITY-2;
+	//Practically infinity
+	Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100),Vec3f(100));
+	float t0 = INFINITY;
 
 	bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, t0, isDebugThread);
 
-	//Fact 1: voxels are correctly copied
-	//Fact 2 hitSomething is never true
-  
-	//if(hitSomething == true)
-	//	printf("WE GOT HIM KENNY\n"); 
-
-    if (!hitSomething){
-
-	    if(triangle_near.v0.x < 42 + 1e6 && triangle_near.v0.x > 42 - 1e6){// < 1e-8 || 42 - triangle_near.v0.x < 1e-8 ){
-    	   
-		 //  printf("Here we are\n"); 
-		   return Vec3f(0,0,0);
-
-		}
-
-		//printf("No, we're here\n");
-       // return Vec3f(0, 0, 255);
-	}	
-	//else
-	//	return Vec3f(0, 255, 0);
+    if (!hitSomething)
+	    return Vec3f(0);
 	
-
-	//printf("%d\n", t0);
-
     // Simple blinn phong shading
     Vec3f color(200.0);
     float kd = 0.3f;
@@ -182,7 +138,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread)
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(5, 5, -2);
+    Vec3f light_pos(7, 7, -2);
 
     Vec3f poi = rayorig.add( raydir.scale(t0) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -200,53 +156,6 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread)
 
 }
 
-/*
-void cpu_render(const std::vector<Triangle*> &triangle_list){
-
-    GridAccel* newGridAccel = new GridAccel(triangle_list);
-
-    Vec3f camera_pos(30, 50, 50);
-    Vec3f camera_target(0, 0, 0);
-    Vec3f camera_up(0, -1, 0);
-    float fov = 60;
-    int width = 512, height = 512;
-
-    camera_up.normalize();
-    Vec3f line_of_sight = camera_target.subtract(camera_pos);
-    Vec3f w = line_of_sight.negate().normalize();
-    Vec3f u = camera_up.crossProduct(w).normalize();
-    Vec3f v = w.crossProduct(u).normalize();
-    float focal_height = 1.0f;
-    float aspectratio = float(width)/float(height);
-    float focal_width = focal_height * aspectratio;
-    float focal_distance = focal_height/(2.0 * tan(fov * M_PI/(180.0 * 2.0)));
-
-
-    Vec3f *image = new Vec3f[width * height], *pixel = image;
-/*
-    // Trace rays
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x, ++pixel) {
-
-            Vec3f dir(0);
-            dir = dir.add(w.negate().scale(focal_distance));
-            float xw = aspectratio*(x - width/2.0 + 0.5)/width;
-            float yw = (y - height/2.0 + 0.5)/height;
-            dir = dir.add(u.scale(xw));
-            dir = dir.add(v.scale(yw));
-            dir.normalize();
-
-            Ray ray(camera_pos, dir, 0);
-
-            //*pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
-            *pixel = fast_trace(ray, newGridAccel);
-        }
-        //std::cout << y << "\n";
-    }
-
-}
-*/
-
 void render(std::vector<Triangle*> &triangle_list){
 
     //Define image size, calculate camera view parameters
@@ -256,7 +165,7 @@ void render(std::vector<Triangle*> &triangle_list){
     float _fov = 30, _aspectratio = width / float(height);
     float angle = tan(M_PI * 0.5 * _fov / 18);
 
-    Vec3f camera_pos(3, 5, 5);
+    Vec3f camera_pos(0, 0, -3);
     Vec3f camera_target(0, 0, 0);
     Vec3f camera_up(0, -1, 0);
     float fov = 60;
@@ -284,7 +193,6 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaEventCreate(&k_stop);
    
 	//CHANGE THIS.
-
     float h_params[10] = {invWidth, invHeight, _fov, _aspectratio, angle, tl_size, width, height, focal_distance, aspectratio};
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
@@ -377,6 +285,7 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaFree(d_triangle_list);
     cudaFree(d_params);
 	cudaFree(d_voxels);
+	cudaFree(d_newGridAccel);
 
     //Parallel program ends*/
 
@@ -404,7 +313,7 @@ void render(std::vector<Triangle*> &triangle_list){
     //Serial program ends*/
 
     //Write output to ppm file
-    std::ofstream ofs("./gpu_trial4.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./blub0.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
@@ -416,6 +325,7 @@ void render(std::vector<Triangle*> &triangle_list){
     //Free memory
     delete [] image;
     free(h_triangle_list);
+	free(h_voxels);
 
 }
 

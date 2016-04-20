@@ -37,9 +37,7 @@ HD bool Voxel::Intersect(const Ray &ray, Intersection *isect, Triangle& triangle
         Triangle* prim = &triangleList[i];
 
         if (prim->Intersect(ray, isect, triangle_near, t_min)){
-
-		//	printf("THIS HAPPENED BRO\n");
-            hitSomething = true;
+			hitSomething = true;
         }
     }
     return hitSomething;
@@ -47,7 +45,6 @@ HD bool Voxel::Intersect(const Ray &ray, Intersection *isect, Triangle& triangle
 }
 
 typedef struct Voxel Voxel;
-
 
 class GridAccel{
 public:
@@ -231,10 +228,6 @@ HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& tria
 	//Check ray against overall grid bounds
 	float rayT;
 
-	if(isDebugThread){
-		printf("%f %f %f\n", bounds.lowerB.x, bounds.lowerB.y, bounds.lowerB.z);
-		printf("%f %f %f\n", bounds.upperB.x, bounds.upperB.y, bounds.upperB.z);
-	}
 	if(bounds.Inside(ray(ray.mint)))
 	 	rayT = ray.mint;
 	else if (!bounds.Intersect(ray, isDebugThread, &rayT)){
@@ -277,8 +270,7 @@ HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& tria
         Voxel *voxel = voxels[offset(Pos[0], Pos[1], Pos[2])];
        
 		if (voxel != NULL){
-			//printf("EXCELLENT BRO\n");
-            hitSomething = voxel->Intersect(ray, isect, triangle_near, t_min);
+            hitSomething |= voxel->Intersect(ray, isect, triangle_near, t_min);
 		}
         // Advance to next voxel
 

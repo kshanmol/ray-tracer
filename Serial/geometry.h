@@ -228,7 +228,7 @@ public:
     int maxAxis();
     boundingBox();
     bool Inside(const Vec3f& pt) const;
-    bool Intersect(const Ray &ray, int isDebugThread, float *hitt0 = NULL, float *hitt1 = NULL) const;
+    bool Intersect(const Ray &ray, float *hitt0 = NULL, float *hitt1 = NULL) const;
 
 };
 
@@ -264,11 +264,7 @@ bool boundingBox::Inside(const Vec3f &pt) const {
     return (pt.x >= lowerB.x && pt.x <= upperB.x && pt.y >= lowerB.y && pt.y <= upperB.y && pt.z >= lowerB.z && pt.z <= upperB.z);
 }
 
-inline void debug(Vec3f v){
-    printf("%f %f %f\n", v.x, v.y, v.z);
-}
-
-bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , float *hitt1 ) const {
+bool boundingBox::Intersect(const Ray &ray, float *hitt0 , float *hitt1 ) const {
 
     float t0 = ray.mint, t1 = ray.maxt;
 
@@ -276,13 +272,6 @@ bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , fl
     float maxB[3] = {upperB.x, upperB.y, upperB.z};
     float ray_orig[3] = {ray.orig.x, ray.orig.y, ray.orig.z};
     float ray_dir[3] = {ray.raydir.x, ray.raydir.y, ray.raydir.z};
-
-    if(isDebugThread){
-        debug(lowerB);
-        debug(upperB);
-        debug(ray.orig);
-        debug(ray.raydir);
-    }
 
     for (int i = 0; i < 3; ++i) {
         // Update interval for _i_th bounding box slab
@@ -296,8 +285,6 @@ bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , fl
         t1 = tFar  < t1 ? tFar  : t1;
         if (t0 > t1) return false;
     }
-
-
     if (hitt0) *hitt0 = t0;
     if (hitt1) *hitt1 = t1;
     return true;
