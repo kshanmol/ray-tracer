@@ -1,5 +1,7 @@
 #define HD __host__ __device__
 
+static const float eps = 1e-4;
+
 HD double det(double a1, double a2, double a3,
             double b1, double b2, double b3,
             double c1, double c2, double c3);
@@ -105,8 +107,7 @@ public:
 
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
-    bool reflective;
-    Vec3f material;
+    int material_index;
 
 	HD Triangle(){};
 
@@ -117,97 +118,61 @@ public:
         const Vec3f &tv_0,
         const Vec3f &tv_1,
         const Vec3f &tv_2,
-        const bool reflect_,
-        const Vec3f mat) :
+        const int m_index) :
         v0(v_0), v1(v_1), v2(v_2),
         tv0(tv_0), tv1(tv_1), tv2(tv_2),
-        reflective(reflect_), material(mat)
+        material_index(m_index)
      { /* empty */ }
 
-    HD bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, float& t_min) const{
+    HD bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, double &t_min, Vec3f &normal
+        ) const{
 
-		//printf("HERE WITHOUT YOU BABE\n");
+        Vec3f orig = ray.orig, dir = ray.raydir;
 
-    	Vec3f orig = ray.orig, dir = ray.raydir;
+        double detA = det(
+                          v0.x - v1.x, v0.x - v2.x, dir.x,
+                          v0.y - v1.y, v0.y - v2.y, dir.y,
+                          v0.z - v1.z, v0.z - v2.z, dir.z
+                         );
 
- 		double A = det(
-                    v0.x - v1.x, v0.x - v2.x, dir.x,
-                    v0.y - v1.y, v0.y - v2.y, dir.y,
-                    v0.z - v1.z, v0.z - v2.z, dir.z
-                    );
+        double beta = det(
+                          v0.x - orig.x, v0.x - v2.x, dir.x,
+                          v0.y - orig.y, v0.y - v2.y, dir.y,
+                          v0.z - orig.z, v0.z - v2.z, dir.z
+                         ) / detA;
 
-        double t_ = det(
-                    v0.x - v1.x, v0.x - v2.x, v0.x - orig.x,
-                    v0.y - v1.y, v0.y - v2.y, v0.y - orig.y,
-                    v0.z - v1.z, v0.z - v2.z, v0.z - orig.z
-                    );
-        t_ = t_ / A;
+        double gamma = det(
+                           v0.x - v1.x, v0.x - orig.x, dir.x,
+                           v0.y - v1.y, v0.y - orig.y, dir.y,
+                           v0.z - v1.z, v0.z - orig.z, dir.z
+                          ) / detA;
 
-        double beta_ = det(
-                    v0.x - orig.x, v0.x - v2.x, dir.x,
-                    v0.y - orig.y, v0.y - v2.y, dir.y,
-                    v0.z - orig.z, v0.z - v2.z, dir.z
-                    );
-        beta_ = beta_ / A;
 
-        double gamma_ = det(
-                    v0.x - v1.x, v0.x - orig.x, dir.x,
-                    v0.y - v1.y, v0.y - orig.y, dir.y,
-                    v0.z - v1.z, v0.z - orig.z, dir.z
-                    );
-        gamma_ = gamma_ / A;
+        if((beta>0) && (gamma>0) && (beta+gamma <1)){
 
-        if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
-        {
-            if(t_ < t_min){
-            	t_min = t_;
-            	triangle_near = *this;
+            double t = det(
+                           v0.x - v1.x, v0.x - v2.x, v0.x - orig.x,
+                           v0.y - v1.y, v0.y - v2.y, v0.y - orig.y,
+                           v0.z - v1.z, v0.z - v2.z, v0.z - orig.z
+                          ) / detA;
+
+            if (t < t_min && t > eps)
+            {
+                t_min = t;
+                triangle_near = *this;
+
+                normal = v0.subtract(v1).crossProduct(v2.subtract(v1));
+                return true;
             }
-            return true;
+
+            return false;
         }
-        return false;
-
-    }
-
-    HD bool rayTriangleIntersect(Vec3f &orig, const Vec3f &dir, float &t, float &beta, float &gamma){
-
-        double A = det(
-                    v0.x - v1.x, v0.x - v2.x, dir.x,
-                    v0.y - v1.y, v0.y - v2.y, dir.y,
-                    v0.z - v1.z, v0.z - v2.z, dir.z
-                    );
-
-        double t_ = det(
-                    v0.x - v1.x, v0.x - v2.x, v0.x - orig.x,
-                    v0.y - v1.y, v0.y - v2.y, v0.y - orig.y,
-                    v0.z - v1.z, v0.z - v2.z, v0.z - orig.z
-                    );
-        t_ = t_ / A;
-
-        double beta_ = det(
-                    v0.x - orig.x, v0.x - v2.x, dir.x,
-                    v0.y - orig.y, v0.y - v2.y, dir.y,
-                    v0.z - orig.z, v0.z - v2.z, dir.z
-                    );
-        beta_ = beta_ / A;
-
-        double gamma_ = det(
-                    v0.x - v1.x, v0.x - orig.x, dir.x,
-                    v0.y - v1.y, v0.y - orig.y, dir.y,
-                    v0.z - v1.z, v0.z - orig.z, dir.z
-                    );
-        gamma_ = gamma_ / A;
-
-        if (beta_ > 0 && gamma_ > 0 && beta_ + gamma_ < 1)
-        {
-            t = t_;
-            beta = beta_;
-            gamma = gamma_;
-            return true;
+        else{
+            return false;
         }
-        return false;
 
-    }
+    }    
+    
 
     HD Vec3f getNormal(Vec3f point) const
     {
@@ -317,3 +282,25 @@ bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , fl
 }
 
 void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, Vec3f mesh_color, bool reflective, Vec3f offset);
+
+void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, int material_index, Vec3f offset=Vec3f(0,0,0), int scale=1);
+
+typedef struct material_{
+    Vec3f base_color;
+    float kd;
+    float ks;
+    float spec_alpha;
+    float ka;
+    bool reflective;
+
+} material;
+
+HD void init_material(material *m, Vec3f b_color, float kd_, float ks_, float sa, float ka_, bool reflect_)
+{
+    m->base_color = b_color;
+    m->kd = kd_;
+    m->ks = ks_;
+    m->spec_alpha = sa;
+    m->ka = ka_;
+    m->reflective = reflect_;
+}

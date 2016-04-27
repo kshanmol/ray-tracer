@@ -19,7 +19,7 @@ struct Voxel{
         triangleList[ptr] = *triangle;
 		ptr++;
     }
-    HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t0);
+    HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, double &t0, Vec3f &normal);
 
 
 public:
@@ -29,19 +29,17 @@ public:
 
 };
 
-HD bool Voxel::Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t_min){
-
+HD bool Voxel::Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, double& t_min, Vec3f &normal){
     bool hitSomething = false;
 
     for (int i = 0; i < voxelListSize; ++i) {
         Triangle* prim = &triangleList[i];
 
-        if (prim->Intersect(ray, isect, triangle_near, t_min)){
+        if (prim->Intersect(ray, isect, triangle_near, t_min, normal)){
 			hitSomething = true;
         }
     }
     return hitSomething;
-
 }
 
 typedef struct Voxel Voxel;
@@ -63,7 +61,7 @@ public:
     HD ~GridAccel();
 
 
-	HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t0, int isDebugThread) const;
+	HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, double &t0, Vec3f &normal, int isDebugThread) const;
 
 	HD bool IntersectP(const Ray &ray) const;	
 
@@ -223,7 +221,7 @@ GridAccel::~GridAccel() {
 }
 
 //From pbr
-HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, float& t_min, int isDebugThread) const{
+HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, double &t_min, Vec3f &normal, int isDebugThread) const{
 
 	//Check ray against overall grid bounds
 	float rayT;
@@ -270,7 +268,7 @@ HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& tria
         Voxel *voxel = voxels[offset(Pos[0], Pos[1], Pos[2])];
        
 		if (voxel != NULL){
-            hitSomething |= voxel->Intersect(ray, isect, triangle_near, t_min);
+            hitSomething |= voxel->Intersect(ray, isect, triangle_near, t_min, normal);
 		}
         // Advance to next voxel
 
