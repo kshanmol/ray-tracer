@@ -91,8 +91,6 @@ Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size)
     Vec3f l = light_pos.subtract(poi).normalize();
     Vec3f h = v.add(l).normalize();
 
-    normal = normal.negate();
-
     // Simple blinn phong shading
  
     material mat = materials[triangle_near.material_index];
@@ -164,8 +162,6 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     Vec3f v = raydir.negate().normalize();
     Vec3f l = light_pos.subtract(poi).normalize();
     Vec3f h = v.add(l).normalize();
- 
-    normal = normal.negate();
  
     // Simple blinn phong shading
     material mat = materials[triangle_near.material_index];

@@ -161,7 +161,7 @@ public:
                 t_min = t;
                 triangle_near = *this;
 
-                normal = v0.subtract(v1).crossProduct(v2.subtract(v1));
+                normal = v2.subtract(v1).crossProduct(v0.subtract(v1));
                 return true;
             }
 
