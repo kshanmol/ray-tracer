@@ -34,15 +34,10 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
     int y = threadIdx.y + blockIdx.y*blockDim.y;
 
     //Unpack parameters
-    float invWidth = params[0], invHeight = params[1];
-    float fov = params[2], _aspectratio = params[3];
-    float angle = params[4];
-    int tl_size = (int) params[5];
-
-	//Unpack new parameters
-	float width = params[6], height = params[7];
-	float focal_distance = params[8];
-	float aspectratio = params[9];
+    int tl_size = (int) params[0];
+	float width = params[1], height = params[2];
+	float focal_distance = params[3];
+	float aspectratio = params[4];
 	Vec3f u = _u;
 	Vec3f v = _v;
 	Vec3f w = _w;
@@ -99,7 +94,7 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(7, 7, -2);
+    Vec3f light_pos(0, 0, 500);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -111,8 +106,6 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
     Vec3f ambient = Vec3f(40.0);
 
-    //return specular;
-    // actual
     return diffuse.add(specular).add(ambient);
 
 }
@@ -138,7 +131,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(7, 7, -2);
+    Vec3f light_pos(0, -500, -100);
 
     Vec3f poi = rayorig.add( raydir.scale(t0) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -151,7 +144,6 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
     Vec3f ambient = Vec3f(40.0f);
 
-    // actual
     return diffuse.add(specular).add(ambient);
 
 }
@@ -161,11 +153,7 @@ void render(std::vector<Triangle*> &triangle_list){
     //Define image size, calculate camera view parameters
     int width = WIDTH, height = WIDTH;
     Vec3f *image = new Vec3f[width * height], *pixel = image;
-    float invWidth = 1 / float(width), invHeight = 1 / float(height);
-    float _fov = 30, _aspectratio = width / float(height);
-    float angle = tan(M_PI * 0.5 * _fov / 18);
-
-    Vec3f camera_pos(0, 0, -3);
+    Vec3f camera_pos(0, -500, -100);
     Vec3f camera_target(0, 0, 0);
     Vec3f camera_up(0, -1, 0);
     float fov = 60;
@@ -180,7 +168,6 @@ void render(std::vector<Triangle*> &triangle_list){
     float focal_width = focal_height * aspectratio;
     float focal_distance = focal_height/(2.0 * tan(fov * M_PI/(180.0 * 2.0)));
 
-
     int tl_size = triangle_list.size();
 
     //Cuda events for timing data
@@ -192,8 +179,8 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaEventCreate(&k_start);
     cudaEventCreate(&k_stop);
 
-	//CHANGE THIS.
-    float h_params[10] = {invWidth, invHeight, _fov, _aspectratio, angle, tl_size, width, height, focal_distance, aspectratio};
+	int params_size = 5; //Used to control memory allocation and memcpy down below. Should match size of h_params
+    float h_params[5] = {tl_size, width, height, focal_distance, aspectratio};
 
     Triangle* h_triangle_list = (Triangle*)malloc(tl_size*sizeof(Triangle));
     for(int i = 0;i<tl_size;i++)
@@ -218,12 +205,14 @@ void render(std::vector<Triangle*> &triangle_list){
 	Voxel** d_voxels;
 
     //Copy parameters needed to set up camera view, triangle list
-    cudaMalloc(&d_params, 10*sizeof(float));
+    cudaMalloc(&d_params, params_size*sizeof(float));
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
 	cudaMalloc(&d_voxels, totalVoxels*sizeof(Voxel*));
 
 	// Copying voxels to device memory
+
+    cudaEventRecord(t_start);
 	int cnt = 0;
 
 	for(int i = 0;i<totalVoxels;i++){
@@ -255,8 +244,7 @@ void render(std::vector<Triangle*> &triangle_list){
     newGridAccel->triangleList = d_triangle_list;
     newGridAccel->voxels = d_voxels;
 
-    cudaEventRecord(t_start);
-    cudaMemcpy(d_params, h_params, 10*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_params, h_params, params_size*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
 
 	//Copy GridAccel
@@ -289,7 +277,7 @@ void render(std::vector<Triangle*> &triangle_list){
 
     //Parallel program ends*/
 
-    /*// Serial program begins
+    /*// Serial program begins : NB : Camera has changed. This will not work now.
     cudaEventRecord(c_start);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x, ++pixel) {
@@ -313,7 +301,7 @@ void render(std::vector<Triangle*> &triangle_list){
     //Serial program ends*/
 
     //Write output to ppm file
-    std::ofstream ofs("./blub0.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./nefertiti0.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
@@ -336,8 +324,8 @@ int main(){
 
     // load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0));
     // load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(-3, 0, 0));
-    load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
-    //#load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
+    load_mesh("nefertiti_triangulated.obj", triangle_list, false, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
+    //load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
     //load_mesh("plane.obj", triangle_list, true, Vec3f(0, 255, 0), false, Vec3f(0, -0.25, 0));
 
     std::cout << "Rendering " << triangle_list.size() << " triangles" << std::endl;
