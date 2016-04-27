@@ -1,4 +1,6 @@
 
+#include <stdio.h>
+
 struct Voxel{
 
     unsigned size() const { return triangleList.size(); }
@@ -19,7 +21,7 @@ private:
 };
 
 bool Voxel::Intersect(const Ray &ray, Intersection *isect){
-
+    /*
     bool hitSomething = false;
     for (int i = 0; i < triangleList.size(); ++i) {
         Triangle* prim = triangleList[i];
@@ -28,7 +30,8 @@ bool Voxel::Intersect(const Ray &ray, Intersection *isect){
         }
     }
     return hitSomething;
-
+    */
+    std::cout << "Voxel Intersect called." << std::endl;
 }
 
 typedef struct Voxel Voxel;
@@ -52,7 +55,7 @@ public:
 
 	bool Intersect(const Ray &ray, Intersection *isect) const;
 
-	bool IntersectP(const Ray &ray) const;	
+	bool IntersectP(const Ray &ray) const;
 
 private:
 
@@ -180,7 +183,7 @@ bool GridAccel::Intersect(const Ray& ray, Intersection *isect ) const{
 	//Setup walk through algorithm
 
     float NextCrossingT[3], DeltaT[3]; //Parametric position of next voxel, parametric width of ray along each axis
-    int Step[3], Out[3], Pos[3]; //Stepping direction ( +1 or -1 ), End of grid marker, current voxel coordinates  
+    int Step[3], Out[3], Pos[3]; //Stepping direction ( +1 or -1 ), End of grid marker, current voxel coordinates
     float ray_dir[3] = {ray.raydir.x, ray.raydir.y, ray.raydir.z};
 
     for (int axis = 0; axis < 3; ++axis) {

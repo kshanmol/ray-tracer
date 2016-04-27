@@ -14,66 +14,98 @@ int clamp(int what, int low, int high);
 #include "geometry.h"
 #include "grid.h"
 
+material materials[] = {
+    // base color, kd, ks, spec_alpha, ka, reflective
+    material{ Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false}, // blub
+    material{ Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, false} // plane
+};
+
 Vec3f reflect(const Vec3f &I, const Vec3f &N){
         return I.subtract(N.scale(2*I.dotProduct(N))).negate();
 }
 
-Vec3f trace(Ray ray, Vec3f rayorig, Vec3f raydir,
-            const std::vector<Triangle*> &triangle_list)
+Vec3f trace(Ray ray, const std::vector<Triangle*> &triangle_list)
 {
-    float tnear = INFINITY,
-          beta = INFINITY,
-          gamma = INFINITY;
+    Intersection* isect = new Intersection();
+    Vec3f rayorig = ray.orig;
+    Vec3f raydir = ray.raydir;
 
-    const Triangle* triangle_near = NULL;
+    double tnear = INFINITY;
+    Vec3f normal;
+
+    Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(100), 0);
+    bool hit = false;
     for (unsigned int i = 0; i < triangle_list.size(); ++i) {
-        float t0 = INFINITY,
-              beta_ = INFINITY,
-              gamma_ = INFINITY;
-        if (triangle_list[i]->rayTriangleIntersect(rayorig, raydir, t0, beta_, gamma_)) {
-            if (t0 < tnear) {
-                tnear = t0;
-                triangle_near = triangle_list[i];
-                beta = beta_;
-                gamma = gamma_;
-            }
-        }
+        hit |= triangle_list[i]->Intersect(ray, isect, triangle_near, tnear, normal);
     }
-    if (!triangle_near)
+    if (!hit)
         return Vec3f(0);
 
-    // Simple blinn phong shading
-    Vec3f color(200.0);
-    float kd = 0.3f;
-    float ks = 20.0f;
-    float spec_alpha = 4;
+    /*
+    Vector3D v = -incident.getDirection();
+    v.normalize();
+    Vector3D l = world->getLightSourcePosition() - incident.getPosition();
+    l.normalize();
+    Vector3D h = (v+l);
+    h.normalize();
+    Vector3D normal = incident.getNormal();
+    normal.normalize();
 
-    // assume only 1 light over here.
-    Vec3f light_pos(5, 5, -2);
+    Color I = world->getLightSourceIntensity();
+    Color L = I*fmax(0,dotProduct(normal,l))*kd + I*pow(fmax(0, dotProduct(normal,h)),this->n)*ks + I*ka;
+    */
+
+    Vec3f light_pos(5, -5, 0);
+    light_pos = ray.orig;
+    // std::cout << ray.orig << std::endl;
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
-    Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+    Vec3f v = raydir.negate().normalize();
     Vec3f l = light_pos.subtract(poi).normalize();
-    Vec3f half = eye.add(l).normalize();
-    Vec3f n = triangle_near->getNormal(poi).normalize();
+    Vec3f h = v.add(l).normalize();
 
+    normal = normal.negate();
 
-    Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l.normalize())));
-    Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-    Vec3f ambient = Vec3f(40.0f);
+    // Simple blinn phong shading
 
+    material mat = materials[triangle_near.material_index];
+    Vec3f base_color = mat.base_color;
+    float kd = mat.kd;
+    float ks = mat.ks;
+    float spec_alpha = mat.spec_alpha;
+    float ka = mat.ka;
 
-    // actual
+    Vec3f diffuse = base_color.multiply(std::max(float(0),normal.dotProduct(l))).scale(kd);
+    Vec3f specular = base_color.multiply(pow(std::max(float(0), normal.dotProduct(h)),spec_alpha)).scale(ks);
+    // std::cout << normal.dotProduct(h) << std::endl;
+    Vec3f ambient = base_color.scale(ka);
     return diffuse.add(specular).add(ambient);
+
+    // Vec3f poi = rayorig.add( raydir.scale(tnear) );
+    // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
+    // Vec3f l = light_pos.subtract(poi).normalize();
+    // Vec3f half = eye.add(l).normalize();
+    // Vec3f n = triangle_near->getNormal(poi).normalize();
+
+
+    // Vec3f diffuse = color.scale(kd * std::max(float(0), n.dotProduct(l.normalize())));
+    // Vec3f specular = color.scale(ks * pow(std::max(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
+    // Vec3f ambient = Vec3f(40.0f);
+
+
+    // // actual
+    // return diffuse.add(specular).add(ambient);
 
 }
 
 Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel)
 {
+    /*
 	Intersection* isect = new Intersection();
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
 	global_t = INFINITY;
 
+    Vec3f normal
 	bool hitSomething = newGridAccel->Intersect(ray, isect);
     if (!hitSomething)
         return Vec3f(0); // background colour.
@@ -81,51 +113,55 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel)
     // Simple blinn phong shading
     Vec3f color = global_triangle_near->material;
     float kd = 2.0f;
-    float ks = 500000000000.0f;
+    float ks = 50.0f;
     float ka = 0.2f;
     float spec_alpha = 4;
     Vec3f light_pos(5, -5, 2);
     float light_intensity = 255;
-    float shadow_scale = 0.1;
+    float shadow_scale = 0.2f;
+
+    // std::cout << global_t << std::endl;
 
     // blinn phong
     Vec3f poi = rayorig.add( raydir.scale(global_t) );
     Vec3f v = raydir.negate().normalize();
     Vec3f l = light_pos.subtract(poi).normalize();
-    Vec3f h = v.add(l);
+    Vec3f h = v.add(l).normalize();
     Vec3f normal = global_triangle_near->getNormalMod();
 
     Vec3f diffuse = color.scale(kd * std::max(float(0), normal.dotProduct(l))).scale(light_intensity);
     Vec3f specular = color.scale(ks * pow(std::max(float(0), normal.dotProduct(h)), spec_alpha)).scale(light_intensity);
     Vec3f ambient = color.scale(ka);
 
-    color = specular.add(diffuse);
-
+    color = specular.add(diffuse).add(ambient);
 
     // shadow
-    Vec3f shadow_dir = light_pos.subtract(poi).negate().normalize();
+    Vec3f shadow_dir = light_pos.subtract(poi).normalize();
     Ray shadow_ray(poi, shadow_dir, eps);
 
     isect->use_eps = true;
     hitSomething = newGridAccel->Intersect(shadow_ray, isect);
-    if (hitSomething)
-        color = color.scale(shadow_scale);
-    isect->use_eps = false;
+    // if (hitSomething)
+    //     return Vec3f(0, 255, 0);
+        // color = color.scale(shadow_scale);
+    // isect->use_eps = false;
 
 
     // assume only 1 light over here.
-    return color.add(ambient);
+    return color;
+    */
+    return Vec3f(255, 0, 0);
 }
 
 void render(const std::vector<Triangle*> &triangle_list){
 
     GridAccel* newGridAccel = new GridAccel(triangle_list);
 
-    Vec3f camera_pos(3, 5, 3);
+    Vec3f camera_pos(4+2+2, 4+2+2, 5+2+2);
     Vec3f camera_target(0, 0, 0);
     Vec3f camera_up(0, -1, 0);
-    float fov = 45;
-    int width = 512, height = 512;
+    float fov = 60;
+    int width = 256, height = 256;
 
     camera_up.normalize();
     Vec3f line_of_sight = camera_target.subtract(camera_pos);
@@ -139,12 +175,6 @@ void render(const std::vector<Triangle*> &triangle_list){
 
 
     Vec3f *image = new Vec3f[width * height], *pixel = image;
-    /*
-    int width = 512, height = 512;
-    float invWidth = 1 / float(width), invHeight = 1 / float(height);
-    float fov = 30, aspectratio = width / float(height);
-    float angle = tan(M_PI * 0.5 * fov / 180.0);
-    */
 
     // Trace rays
     for (int y = 0; y < height; ++y) {
@@ -160,18 +190,11 @@ void render(const std::vector<Triangle*> &triangle_list){
 
             Ray ray(camera_pos, dir, 0);
 
-            /*
-            float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
-            float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
-            Vec3f raydir(xx, yy, 2);
-            raydir.normalize();
-            Ray ray(Vec3f(0,0.1,-7), raydir, 0);
-            */
-
-            //*pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
-            *pixel = fast_trace(ray, newGridAccel);
+            // *pixel = trace(ray, Vec3f(0,0.1,-7), raydir, triangle_list);
+            // *pixel = fast_trace(ray, newGridAccel);
+            *pixel = trace(ray, triangle_list);
         }
-        //std::cout << y << "\n";
+        std::cout << y << "\n";
     }
 
     // Save result to a PPM image (keep these flags if you compile under Windows)
@@ -186,28 +209,24 @@ void render(const std::vector<Triangle*> &triangle_list){
     delete [] image;
 }
 
-void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, Vec3f mesh_color, bool reflective=false, Vec3f offset=Vec3f(0,0,0));
-
 int main(){
 
     std::vector<Triangle*> triangle_list;
 
-    load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0));
-    load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(1.5, 0, 0));
+    //params: filename, &triangle_list, format_has_vt, material_index, offset, scale
+    load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(0, 0, 0), 5);
+    load_mesh("plane.obj.new", triangle_list, true, 1, Vec3f(0, 0.85, 0), 10);
+
+    std::cout << "Rendering " << triangle_list.size() << " triangles" << std::endl;
     render(triangle_list);
 
     return 0;
 }
 
 
-double det(double a1, double a2, double a3,
-            double b1, double b2, double b3,
-            double c1, double c2, double c3)
+double det(double data_3x3[3][3])
 {
-    double t1 = a1 * (b2*c3 - b3*c2);
-    double t2 = a2 * (b1*c3 - b3*c1);
-    double t3 = a3 * (b1*c2 - b2*c1);
-    return t1 - t2 + t3;
+    return data_3x3[0][0]*((data_3x3[1][1]*data_3x3[2][2]) - (data_3x3[2][1]*data_3x3[1][2])) -data_3x3[0][1]*(data_3x3[1][0]*data_3x3[2][2] - data_3x3[2][0]*data_3x3[1][2]) + data_3x3[0][2]*(data_3x3[1][0]*data_3x3[2][1] - data_3x3[2][0]*data_3x3[1][1]);
 }
 
 int clamp(int what, int low, int high)
@@ -217,7 +236,7 @@ int clamp(int what, int low, int high)
     return what;
 }
 
-void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, Vec3f mesh_color, bool reflective, Vec3f offset)
+void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, int material_index, Vec3f offset, int scale)
 {
     std::ifstream objinfile(filename);
 
@@ -236,7 +255,8 @@ void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bo
 
             double a, b, c;
             iss >> a >> b >> c;
-            vertices.push_back(new Vec3f(a + offset.x, b + offset.y, c + offset.z));
+            Vec3f *v_new = new Vec3f(scale*(a + offset.x), scale*(b + offset.y), scale*(c + offset.z)); // TODO: check.
+            vertices.push_back(v_new);
         }
         else if (type_.compare("vt") == 0){
             double a, b;
@@ -272,11 +292,11 @@ void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bo
 
                 triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
                                         *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1],
-                                        reflective, mesh_color);
+                                        material_index);
             } else{
                 triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
                                         0, 0, 0,
-                                        reflective, mesh_color);
+                                        material_index);
             }
 
             triangle_list.push_back(triangle);

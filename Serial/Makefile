@@ -4,7 +4,7 @@ all:
 	rm -f raytracer.o
 
 cpu:
-	g++ -O3 -mssse3 -malign-double -c raytracer.cpp
+	g++ -O3 -mssse3 -malign-double -c raytracer.cpp -std=c++11
 	g++  -O3 -mssse3 -malign-double -o ray_tracer raytracer.o
 	rm -f raytracer.o
 
