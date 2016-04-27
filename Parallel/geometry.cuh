@@ -75,10 +75,6 @@ public:
 
 typedef Vec3<float> Vec3f;
 
-HD Vec3f reflect(const Vec3f &I, const Vec3f &N){
-    return I.subtract(N.scale(2*I.dotProduct(N))).negate();
-}
-
 class Ray{
 
 public:
@@ -291,16 +287,17 @@ typedef struct material_{
     float ks;
     float spec_alpha;
     float ka;
+    float km;
     bool reflective;
-
 } material;
 
-HD void init_material(material *m, Vec3f b_color, float kd_, float ks_, float sa, float ka_, bool reflect_)
+HD void init_material(material *m, Vec3f b_color, float kd_, float ks_, float sa, float ka_, bool reflect_, float km_=0)
 {
     m->base_color = b_color;
     m->kd = kd_;
     m->ks = ks_;
     m->spec_alpha = sa;
     m->ka = ka_;
+    m->km = km_;
     m->reflective = reflect_;
 }

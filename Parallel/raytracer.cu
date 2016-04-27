@@ -14,6 +14,8 @@
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
 #define WIDTH 512
+#define REFLECT_DEPTH 3
+
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 HD float min_(float a, float b){ return (a > b) ? b : a ;}
@@ -24,6 +26,7 @@ HD int clamp(int what, int low, int high);
 
 HD Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size);
 HD Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread);
+HD Vec3f reflect(const Vec3f &I, const Vec3f &N);
 
 __global__
 void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triangle* triangle_list, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos){
@@ -58,7 +61,9 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
     image[y*WIDTH + x] = fast_trace(ray, d_newGridAccel, x == 275  && y == 240);
 
 }
- 
+
+// Below `trace` method commented to prevent calling accidentaly. Works for shadows.
+/*
 Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size)
 {
     // TODO: pass as pointer in parameters
@@ -129,15 +134,17 @@ Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size)
 
     return color;
 }
-
+*/
 
 Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 
     // TODO: pass as pointer in parameters
-    // base color, kd, ks, spec_alpha, ka, reflective
-    material materials[2] = {};
-    init_material(&materials[0], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // blub
-    init_material(&materials[1], Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, false); // plane
+    // base color, kd, ks, spec_alpha, ka, reflective, km
+    material materials[4] = {};
+    init_material(&materials[0], Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, true, 0.4); // plane
+    init_material(&materials[1], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
+    init_material(&materials[2], Vec3f(0, 20, 0), 10.0f, 10.0f, 1.25, 0.3f, true, 0.9999); // blub
+    init_material(&materials[3], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
 
     Intersection* isect = NULL;
     Vec3f rayorig = ray.orig, raydir = ray.raydir;
@@ -189,9 +196,28 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
         in_shadow = newGridAccel->Intersect(shadow_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
     }
     if (in_shadow){
-        return color.scale(0.5f);
+        color = color.scale(0.5f);
     }
-    
+
+    if (mat.reflective && ray.depth < REFLECT_DEPTH){
+        Vec3f reflect_dir = reflect(raydir.normalize(), normal.normalize()).normalize();
+        Ray reflect_ray(poi, reflect_dir, ray, eps); // set ray as parent ray
+
+        Triangle temp_tri_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(0), 0);
+        double temp_tnear = INFINITY;
+        Vec3f temp_normal(0);
+
+        bool ray_hit = newGridAccel->Intersect(reflect_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
+
+        if(ray_hit){
+            Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread); // TODO: extremely inefficient.
+            return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
+        }
+        else{
+            return  color.multiply(mat.base_color);
+        }
+    }
+
 
     return color;
 }
@@ -374,10 +400,10 @@ int main(){
 
     // load_mesh("nefertiti_triangulated.obj", triangle_list, false, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0)); // Incorrect call.
     // load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(0, 0, 0), 5);
-    load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(0, 0, 0), 5);
-    load_mesh("spot_triangulated.obj", triangle_list, true, 0, Vec3f(-2, 0, 0), 5);
-    load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(2, 0, 0), 5);
-    load_mesh("plane.obj", triangle_list, true, 1, Vec3f(0, 0.4, 0), 3);
+    load_mesh("plane.obj", triangle_list, true, 0, Vec3f(0, 0.4, 0), 3);
+    load_mesh("blub_triangulated.obj", triangle_list, true, 1, Vec3f(-2, 0, 0), 5);
+    load_mesh("spot_triangulated.obj", triangle_list, true, 1, Vec3f(0, 0, 0), 5); // material index set to because material 2 is reflective, which breaks code due to spilling stack size.
+    load_mesh("blub_triangulated.obj", triangle_list, true, 3, Vec3f(2, 0, 0), 5);
 
     std::cout << "Rendering " << triangle_list.size() << " triangles" << std::endl;
     render(triangle_list);
@@ -470,4 +496,9 @@ void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bo
     }
 
     objinfile.close();
+}
+
+HD Vec3f reflect(const Vec3f &incident, const Vec3f &normal){
+        float factor = incident.dotProduct(normal) * 2;
+        return incident.subtract( normal.scale(factor) );
 }
