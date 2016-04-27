@@ -1,5 +1,5 @@
 #include <stdio.h>
-static const float eps = 1e-6;
+static const float eps = 1e-2;
 
 double det(double data_3x3[3][3]);
 
@@ -124,7 +124,8 @@ public:
 
     //Not our stuff yet.
 
-    bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, double &t_min, Vec3f &normal) const{
+    bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, double &t_min, Vec3f &normal
+        ) const{
 
         Vec3f orig = ray.orig, dir = ray.raydir;
         double a[3][3] = {{v0.x-v1.x, v0.x-v2.x,dir.x},
@@ -152,8 +153,12 @@ public:
 
             double t = det(T)/detA;
 
-            if (t < t_min && t > eps && detA != 0)
+            if (t < t_min)// && t > eps)
             {
+                if(t < eps){
+                    // std::cout << "Rejected due to eps " << t << std::endl;
+                    return false;
+                }
                 t_min = t;
                 triangle_near = *this;
 

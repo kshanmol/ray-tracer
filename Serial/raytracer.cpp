@@ -55,8 +55,8 @@ Vec3f trace(Ray ray, const std::vector<Triangle*> &triangle_list)
     Color L = I*fmax(0,dotProduct(normal,l))*kd + I*pow(fmax(0, dotProduct(normal,h)),this->n)*ks + I*ka;
     */
 
-    Vec3f light_pos(5, -5, 0);
-    light_pos = ray.orig;
+    Vec3f light_pos(2, 5, 0);
+    // light_pos = ray.orig;
     // std::cout << ray.orig << std::endl;
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
@@ -79,7 +79,32 @@ Vec3f trace(Ray ray, const std::vector<Triangle*> &triangle_list)
     Vec3f specular = base_color.multiply(pow(std::max(float(0), normal.dotProduct(h)),spec_alpha)).scale(ks);
     // std::cout << normal.dotProduct(h) << std::endl;
     Vec3f ambient = base_color.scale(ka);
-    return diffuse.add(specular).add(ambient);
+    Vec3f color = diffuse.add(specular).add(ambient);
+
+    Vec3f shadow_ray_dir = light_pos.subtract(poi).normalize();
+
+    Ray shadow_ray(poi, shadow_ray_dir, eps);
+    // return poi.scale(100);
+    // return shadow_ray.raydir.scale(100);
+    bool in_shadow = false;
+    {
+        Triangle temp_tri_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(100), 0);
+        double temp_tnear = INFINITY;
+        Vec3f temp_normal(0, 0, 0);
+        for (unsigned int i = 0; i < triangle_list.size(); ++i) {
+            if(triangle_list[i]->Intersect(shadow_ray, isect, temp_tri_near, temp_tnear, temp_normal)){
+                // std::cout << "In shadow region" << std::endl;
+                in_shadow = true;
+                break;
+            }
+        }
+    }
+    if (in_shadow){
+        // return Vec3f(0, 255, 0);
+        return color.scale(0.5f);
+    }
+
+    return color;
 
     // Vec3f poi = rayorig.add( raydir.scale(tnear) );
     // Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
@@ -214,7 +239,10 @@ int main(){
     std::vector<Triangle*> triangle_list;
 
     //params: filename, &triangle_list, format_has_vt, material_index, offset, scale
+    // load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(0, 0, 0), 5);
     load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(0, 0, 0), 5);
+    load_mesh("spot_triangulated.obj", triangle_list, true, 0, Vec3f(-1, 0, 0), 5);
+    load_mesh("blub_triangulated.obj", triangle_list, true, 0, Vec3f(1, 0, 0), 5);
     load_mesh("plane.obj.new", triangle_list, true, 1, Vec3f(0, 0.85, 0), 10);
 
     std::cout << "Rendering " << triangle_list.size() << " triangles" << std::endl;
