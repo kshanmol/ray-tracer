@@ -163,7 +163,7 @@ GridAccel::~GridAccel() {
     free(voxels);
 }
 
-//copied 
+//From pbr
 bool GridAccel::Intersect(const Ray& ray, Intersection *isect ) const{
 
 	//Check ray against overall grid bounds

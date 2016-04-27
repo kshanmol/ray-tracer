@@ -1,11 +1,12 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#define HD __host__ __device__
 
 struct Voxel{
 
-    unsigned size() const { return voxelListSize; }
-    Voxel() { ptr = 0; }
-    Voxel(Triangle* op) {
+    HD unsigned size() const { return voxelListSize; }
+    HD Voxel() { ptr = 0; }
+    HD Voxel(Triangle* op) {
 
 		ptr = 0;
         triangleList = (Triangle*)malloc(sizeof(Triangle));
@@ -14,11 +15,11 @@ struct Voxel{
 
     }
 
-    void AddPrimitive(Triangle* triangle) {
+    HD void AddPrimitive(Triangle* triangle) {
         triangleList[ptr] = *triangle;
 		ptr++;
     }
-    bool Intersect(const Ray &ray, Intersection *isect);
+    HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t0);
 
 
 public:
@@ -28,13 +29,15 @@ public:
 
 };
 
-bool Voxel::Intersect(const Ray &ray, Intersection *isect){
+HD bool Voxel::Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t_min){
 
     bool hitSomething = false;
+
     for (int i = 0; i < voxelListSize; ++i) {
         Triangle* prim = &triangleList[i];
-        if (prim->Intersect(ray, isect)){
-            hitSomething = true;
+
+        if (prim->Intersect(ray, isect, triangle_near, t_min)){
+			hitSomething = true;
         }
     }
     return hitSomething;
@@ -42,7 +45,6 @@ bool Voxel::Intersect(const Ray &ray, Intersection *isect){
 }
 
 typedef struct Voxel Voxel;
-
 
 class GridAccel{
 public:
@@ -56,18 +58,18 @@ public:
 
 	GridAccel(Triangle* triangle_list, int listSize);
 
-    boundingBox WorldBound() const;
-    bool CanIntersect() const { return true; }
-    ~GridAccel();
+    HD boundingBox WorldBound() const;
+    HD bool CanIntersect() const { return true; }
+    HD ~GridAccel();
 
 
-	bool Intersect(const Ray &ray, Intersection *isect) const;
+	HD bool Intersect(const Ray &ray, Intersection *isect, Triangle& triangle_near, float& t0, int isDebugThread) const;
 
-	bool IntersectP(const Ray &ray) const;	
+	HD bool IntersectP(const Ray &ray) const;	
 
 private:
 
-	int posToVoxel(const Vec3f& pt, int axis) const {
+	HD int posToVoxel(const Vec3f& pt, int axis) const {
 
 		float P[3] = {pt.x, pt.y, pt.z};
 		float LB[3] = {bounds.lowerB.x, bounds.lowerB.y, bounds.lowerB.z};
@@ -76,12 +78,12 @@ private:
 
 	}
 
-	float voxelToPos(int p, int axis) const {
+	HD float voxelToPos(int p, int axis) const {
 		float lowerBound[3] = {bounds.lowerB.x, bounds.lowerB.y, bounds.lowerB.z};
 		return lowerBound[axis] + p * width[axis];
 	}
 
-	inline int offset(int x, int y, int z) const {
+	HD inline int offset(int x, int y, int z) const {
 		return z*nVoxels[0]*nVoxels[1] + y*nVoxels[0] + x;
 	}
 
@@ -220,16 +222,17 @@ GridAccel::~GridAccel() {
     free(voxels);
 }
 
-//copied 
-bool GridAccel::Intersect(const Ray& ray, Intersection *isect ) const{
+//From pbr
+HD bool GridAccel::Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, float& t_min, int isDebugThread) const{
 
 	//Check ray against overall grid bounds
 	float rayT;
 
 	if(bounds.Inside(ray(ray.mint)))
-		rayT = ray.mint;
-	else if (!bounds.Intersect(ray, &rayT))
+	 	rayT = ray.mint;
+	else if (!bounds.Intersect(ray, isDebugThread, &rayT)){
 		return false;
+	}
 
 	Vec3f gridIntersect = ray(rayT);
 	float grid_intersect[3] = {gridIntersect.x, gridIntersect.y, gridIntersect.z};
@@ -265,9 +268,10 @@ bool GridAccel::Intersect(const Ray& ray, Intersection *isect ) const{
     for (;;) {
         // Check for intersection in current voxel and advance to next
         Voxel *voxel = voxels[offset(Pos[0], Pos[1], Pos[2])];
-        if (voxel != NULL)
-            hitSomething |= voxel->Intersect(ray, isect);
-
+       
+		if (voxel != NULL){
+            hitSomething |= voxel->Intersect(ray, isect, triangle_near, t_min);
+		}
         // Advance to next voxel
 
         // Find _stepAxis_ for stepping to next voxel

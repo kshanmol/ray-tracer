@@ -4,9 +4,7 @@ all:
 	rm -f raytracer.o
 
 debug:
-	nvcc -g -c raytracer.cu
-	nvcc  -g -o ray_tracer raytracer.o
-	rm -f raytracer.o
+	nvcc -Xptxas --maxrregcount=32 -g -G -arch=sm_20 raytracer.cu -o ray_tracer
 
 cpu:
 	g++ -O3 -mssse3 -malign-double -c raytracer.cpp `libpng-config --cflags` -I $PREFIX/include
