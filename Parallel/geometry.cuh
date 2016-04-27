@@ -105,6 +105,8 @@ public:
 
     Vec3f v0, v1, v2;
     Vec3f tv0, tv1, tv2; // texture coordinates of vertices
+    bool reflective;
+    Vec3f material;
 
 	HD Triangle(){};
 
@@ -114,9 +116,12 @@ public:
         const Vec3f &v_2,
         const Vec3f &tv_0,
         const Vec3f &tv_1,
-        const Vec3f &tv_2) :
+        const Vec3f &tv_2,
+        const bool reflect_,
+        const Vec3f mat) :
         v0(v_0), v1(v_1), v2(v_2),
-        tv0(tv_0), tv1(tv_1), tv2(tv_2)
+        tv0(tv_0), tv1(tv_1), tv2(tv_2),
+        reflective(reflect_), material(mat)
      { /* empty */ }
 
     HD bool Intersect(const Ray& ray, Intersection *isect, Triangle& triangle_near, float& t_min) const{
@@ -225,7 +230,7 @@ class boundingBox{
 
 public:
     //public data
-    Vec3f lowerB, upperB; 
+    Vec3f lowerB, upperB;
 
     //public methods
     HD void union_(const Vec3f& vert);
@@ -299,7 +304,7 @@ bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , fl
         if (tNear > tFar){
 			float temp = tNear;
 			tNear = tFar;
-			tFar = temp;	
+			tFar = temp;
 		};
         t0 = tNear > t0 ? tNear : t0;
         t1 = tFar  < t1 ? tFar  : t1;
@@ -311,3 +316,4 @@ bool boundingBox::Intersect(const Ray &ray, int isDebugThread, float *hitt0 , fl
 
 }
 
+void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, Vec3f mesh_color, bool reflective, Vec3f offset);

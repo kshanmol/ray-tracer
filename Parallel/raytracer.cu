@@ -16,7 +16,7 @@
 #define WIDTH 512
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
-HD float min_(float a, float b){ return (a > b) ? b : a ;} 
+HD float min_(float a, float b){ return (a > b) ? b : a ;}
 static const float eps = 1e-8;
 HD int clamp(int what, int low, int high);
 
@@ -31,8 +31,8 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
 
     //Pixel coordinates
     int x = threadIdx.x + blockIdx.x*blockDim.x;
-    int y = threadIdx.y + blockIdx.y*blockDim.y;	
-		
+    int y = threadIdx.y + blockIdx.y*blockDim.y;
+
     //Unpack parameters
     float invWidth = params[0], invHeight = params[1];
     float fov = params[2], _aspectratio = params[3];
@@ -61,7 +61,7 @@ void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triang
 
     //Trace ray
     //image[y*WIDTH + x] = trace(camerapos, dir, triangle_list, tl_size);
-	image[y*WIDTH + x] = fast_trace(ray, d_newGridAccel, x == 275  && y == 240);	
+	image[y*WIDTH + x] = fast_trace(ray, d_newGridAccel, x == 275  && y == 240);
 
 }
 
@@ -91,7 +91,7 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     if (!triangle_near){
         return Vec3f(0);
 	}
- 
+
     // Simple blinn phong shading
     Vec3f color(200.0);
     float kd = 0.3f;
@@ -121,16 +121,16 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 
 	Intersection* isect;
 	Vec3f rayorig = ray.orig, raydir = ray.raydir;
-	
+
 	//Practically infinity
-	Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100),Vec3f(100));
+	Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100),Vec3f(100), false, Vec3f(100));
 	float t0 = INFINITY;
 
 	bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, t0, isDebugThread);
 
     if (!hitSomething)
 	    return Vec3f(0);
-	
+
     // Simple blinn phong shading
     Vec3f color(200.0);
     float kd = 0.3f;
@@ -146,7 +146,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near.getNormal(poi).normalize();
 
-   
+
     Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
     Vec3f ambient = Vec3f(40.0f);
@@ -191,7 +191,7 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaEventCreate(&t_stop);
     cudaEventCreate(&k_start);
     cudaEventCreate(&k_stop);
-   
+
 	//CHANGE THIS.
     float h_params[10] = {invWidth, invHeight, _fov, _aspectratio, angle, tl_size, width, height, focal_distance, aspectratio};
 
@@ -199,7 +199,7 @@ void render(std::vector<Triangle*> &triangle_list){
     for(int i = 0;i<tl_size;i++)
         h_triangle_list[i] = *triangle_list[i];
 
-    GridAccel* newGridAccel = new GridAccel(h_triangle_list, tl_size);	
+    GridAccel* newGridAccel = new GridAccel(h_triangle_list, tl_size);
 
 	int totalVoxels = 1;
 	for(int i=0;i<3;i++)
@@ -207,43 +207,43 @@ void render(std::vector<Triangle*> &triangle_list){
 
     Voxel** h_voxels = (Voxel**)malloc(sizeof(Voxel*)*totalVoxels);
 
-    //Parallel program begins	
+    //Parallel program begins
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(width/dimBlock.x, height/dimBlock.y);
 
     float* d_params;
-    Triangle* d_triangle_list;  
+    Triangle* d_triangle_list;
     Vec3f *d_image;
 	GridAccel* d_newGridAccel;
 	Voxel** d_voxels;
 
     //Copy parameters needed to set up camera view, triangle list
-    cudaMalloc(&d_params, 10*sizeof(float));    
+    cudaMalloc(&d_params, 10*sizeof(float));
     cudaMalloc(&d_triangle_list, tl_size*sizeof(Triangle));
     cudaMalloc(&d_image, width*height*sizeof(Vec3f));
 	cudaMalloc(&d_voxels, totalVoxels*sizeof(Voxel*));
-	
+
 	// Copying voxels to device memory
 	int cnt = 0;
 
 	for(int i = 0;i<totalVoxels;i++){
 
         if(newGridAccel->voxels[i] != NULL){
-	
-			Triangle* d_voxel_triangle_list;	
+
+			Triangle* d_voxel_triangle_list;
            	cudaMalloc(&d_voxel_triangle_list, newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle));
-			cudaMemcpy(d_voxel_triangle_list, newGridAccel->voxels[i]->triangleList, newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle), cudaMemcpyHostToDevice); 
-	
+			cudaMemcpy(d_voxel_triangle_list, newGridAccel->voxels[i]->triangleList, newGridAccel->voxels[i]->voxelListSize*sizeof(Triangle), cudaMemcpyHostToDevice);
+
 			h_voxels[i] = (Voxel*)malloc(sizeof(Voxel));
-			h_voxels[i]->voxelListSize = newGridAccel->voxels[i]->voxelListSize;	
+			h_voxels[i]->voxelListSize = newGridAccel->voxels[i]->voxelListSize;
 			h_voxels[i]->triangleList = d_voxel_triangle_list;
 
-			Voxel* d_voxel_elem;	
+			Voxel* d_voxel_elem;
 			cudaMalloc(&d_voxel_elem, sizeof(Voxel));
 			cudaMemcpy(d_voxel_elem, h_voxels[i], sizeof(Voxel), cudaMemcpyHostToDevice);
-					          
+
 			h_voxels[i] = d_voxel_elem;
-	
+
         }
 		cnt++;
     }
@@ -258,15 +258,15 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaEventRecord(t_start);
     cudaMemcpy(d_params, h_params, 10*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_triangle_list, h_triangle_list, tl_size*sizeof(Triangle), cudaMemcpyHostToDevice);
-	
+
 	//Copy GridAccel
 	cudaMemcpy(d_newGridAccel, newGridAccel, sizeof(GridAccel), cudaMemcpyHostToDevice);
-	
+
 	cudaEventRecord(k_start);
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);
     cudaEventRecord(k_stop);
 
-    cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);    
+    cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);
     cudaEventRecord(t_stop);
 
     //Print timing data
@@ -332,68 +332,15 @@ void render(std::vector<Triangle*> &triangle_list){
 
 int main(){
 
-    std::ifstream objinfile("blub_triangulated.obj");
-
-    std::string line;
-    std::vector<Vec3f*> vertices;
-    std::vector<Vec3f*> vertex_textures;
     std::vector<Triangle*> triangle_list;
-    Triangle* triangle;
 
-    //Reading obj file
-    while(getline(objinfile, line)){
+    // load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0));
+    // load_mesh("spot_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(-3, 0, 0));
+    load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
+    //#load_mesh("blub_triangulated.obj", triangle_list, true, Vec3f(255, 0, 0), false, Vec3f(0, 0, 0));
+    //load_mesh("plane.obj", triangle_list, true, Vec3f(0, 255, 0), false, Vec3f(0, -0.25, 0));
 
-        std::istringstream iss(line);
-        std::string type_;
-        iss >> type_;
-        std::string fv1, fv2, fv3;
-
-	//Create list of vertices
-        if (type_.compare("v") == 0){
-
-            double a, b, c;
-            iss >> a >> b >> c;
-            vertices.push_back(new Vec3f(a, b, c));
-        }
-	//Create list of vertex textures
-        else if (type_.compare("vt") == 0){
-            double a, b;
-            iss >> a >> b;
-            vertex_textures.push_back(new Vec3f(a, b, 0));
-        }
-	//Create list of triangles
-        else if (type_.compare("f") == 0){
-
-            iss >> fv1 >> fv2 >> fv3;
-            std::stringstream ssfv1(fv1);
-            std::stringstream ssfv2(fv2);
-            std::stringstream ssfv3(fv3);
-
-            int v1, v2, v3;
-            int vt1, vt2, vt3;
-            ssfv1 >> v1;
-            ssfv1.ignore();
-            ssfv1 >> vt1;
-
-            ssfv2 >> v2;
-            ssfv2.ignore();
-            ssfv2 >> vt2;
-
-            ssfv3 >> v3;
-            ssfv3.ignore();
-            ssfv3 >> vt3;
-
-            Vec3f *vertex1 = vertices[v1 - 1];
-            Vec3f *vertex2 = vertices[v2 - 1];
-            Vec3f *vertex3 = vertices[v3 - 1];
-
-            triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
-                                    *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1]);
-
-            triangle_list.push_back(triangle);
-        }
-    }
-
+    std::cout << "Rendering " << triangle_list.size() << " triangles" << std::endl;
     render(triangle_list);
 
     return 0;
@@ -417,3 +364,72 @@ HD int clamp(int what, int low, int high)
     return what;
 }
 
+void load_mesh(const char * filename, std::vector<Triangle *> &triangle_list, bool format_has_vt, Vec3f mesh_color, bool reflective, Vec3f offset)
+{
+    std::ifstream objinfile(filename);
+
+    std::string line;
+    std::vector<Vec3f*> vertices;
+    std::vector<Vec3f*> vertex_textures;
+    Triangle* triangle;
+
+    while(getline(objinfile, line)){
+
+        std::istringstream iss(line);
+        std::string type_;
+        iss >> type_;
+        std::string fv1, fv2, fv3;
+        if (type_.compare("v") == 0){
+
+            double a, b, c;
+            iss >> a >> b >> c;
+            Vec3f *v_new = new Vec3f(1*(a + offset.x), 1*(b + offset.y), 1*(c + offset.z));
+            vertices.push_back(v_new);
+        }
+        else if (type_.compare("vt") == 0){
+            double a, b;
+            iss >> a >> b;
+            vertex_textures.push_back(new Vec3f(a, b, 0));
+        }
+        else if (type_.compare("f") == 0){
+
+            iss >> fv1 >> fv2 >> fv3;
+            std::stringstream ssfv1(fv1);
+            std::stringstream ssfv2(fv2);
+            std::stringstream ssfv3(fv3);
+
+            int v1, v2, v3;
+            int vt1, vt2, vt3;
+            ssfv1 >> v1;
+
+            ssfv2 >> v2;
+
+            ssfv3 >> v3;
+
+            Vec3f *vertex1 = vertices[v1 - 1];
+            Vec3f *vertex2 = vertices[v2 - 1];
+            Vec3f *vertex3 = vertices[v3 - 1];
+
+            if (format_has_vt){
+                ssfv1.ignore();
+                ssfv1 >> vt1;
+                ssfv2.ignore();
+                ssfv2 >> vt2;
+                ssfv3.ignore();
+                ssfv3 >> vt3;
+
+                triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
+                                        *vertex_textures[vt1-1], *vertex_textures[vt2-1], *vertex_textures[vt3-1],
+                                        reflective, mesh_color);
+            } else{
+                triangle = new Triangle(*vertices[v1-1], *vertices[v2-1], *vertices[v3-1],
+                                        0, 0, 0,
+                                        reflective, mesh_color);
+            }
+
+            triangle_list.push_back(triangle);
+        }
+    }
+
+    objinfile.close();
+}
