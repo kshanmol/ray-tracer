@@ -28,6 +28,7 @@ HD Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size);
 HD Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread);
 HD Vec3f reflect(const Vec3f &I, const Vec3f &N);
 
+/*
 typedef struct Lock {
 	int *mutex;
 	Lock() {
@@ -45,9 +46,7 @@ typedef struct Lock {
 		atomicExch(mutex, 0);
 	}
 } Lock;
-
-
-__device__ int done_count = 0; //Tracks number of pixels completed
+*/
 
 typedef struct queue_intersect_elem{
 
@@ -59,31 +58,21 @@ typedef struct queue_intersect_elem{
 typedef struct queue_intersect{
 
 	queue_intersect_elem* elems;
-	int front;
-	int rear;
-	Lock lock;
-	
+	int front;	
+
 }queue_intersect;
 
 __device__
  void queue_intersect_add(queue_intersect* q, Ray ray, int x, int y){
 
-	// int index = atomicInc((unsigned int *)&(q->front), Q_MAX);
+	int index = atomicInc((unsigned int *)&(q->front), Q_MAX);
 	//Handle overflow (Q_MAX)
-
-	q->lock.lock();	
 
 	queue_intersect_elem elem;
 	elem.ray = ray;
 	elem.x = x; elem.y = y;
 	
-	q->elems[q->front] = elem;
-	
-	q->front = (q->front + 1)%Q_MAX;
-
-    q->lock.unlock();
-	// MYASSERT(q->front < Q_MAX);
-
+	q->elems[index] = elem;
 }
 
 __device__
@@ -92,25 +81,22 @@ queue_intersect_elem get_intersect_work(queue_intersect *q)
 
 	queue_intersect_elem result;
 
-	q->lock.lock();
-	if(q->rear == q->front){
-		//empty queue
-		queue_intersect_elem special_break;
-        special_break.x = 7331; special_break.y = 7331;
-        result = special_break;
-	}	
-	else{
-		
-		result = q->elems[q->rear];
-		q->rear = (q->rear + 1)%Q_MAX;
-		
+	int index = atomicDec((unsigned int *)&(q->front), Q_MAX);
+	if (index == 0){ // Underflow
+		result.x = result.y = 7331;
 	}
-	q->lock.unlock();
+	else {
+		result = q->elems[index - 1];
+	}
+	
 	return result;
 }
 
 __global__
-void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos, queue_intersect* work_q){
+void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos, queue_intersect* work_q, int *count_rays_gen, int *count_work_todo){
+
+	// increment count
+	atomicInc((unsigned int *)count_rays_gen, WIDTH*WIDTH+2);
 
     //Pixel coordinates
     int x = threadIdx.x + blockIdx.x*blockDim.x;
@@ -139,13 +125,15 @@ void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f
 	if(newGridAccel->bounds.Inside(ray(ray.mint)))
 	 	rayT = ray.mint;
 	else if (!newGridAccel->bounds.Intersect(ray, 0, &rayT)){ //second param <- isDebugThread
-		atomicInc((unsigned int*)&done_count, Q_MAX);
+		// atomicInc((unsigned int*)&done_count, Q_MAX);
 		return;
 	}
 
+	atomicInc((unsigned int *)count_work_todo, WIDTH*WIDTH+2);
 	queue_intersect_add(work_q, ray, x, y);
 }
 
+/*
 __global__
 void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel){
 
@@ -184,6 +172,7 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel){
 	}
 
 } 
+*/
 
 __global__
 void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triangle* triangle_list, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos){
@@ -491,17 +480,30 @@ void render(std::vector<Triangle*> &triangle_list){
 	queue_intersect* d_work_q;
 	queue_intersect_elem* d_work_q_elems;
 	cudaMalloc(&d_work_q_elems, sizeof(queue_intersect_elem) * Q_MAX);
-	Lock *queue_intersect_lock = new Lock();
 	queue_intersect h_work_q;
-	h_work_q.front = 0;h_work_q.rear = 0;h_work_q.elems = d_work_q_elems; h_work_q.lock = *queue_intersect_lock;
+	h_work_q.front = 0; h_work_q.elems = d_work_q_elems;
 	cudaMalloc(&d_work_q, sizeof(queue_intersect));
 	cudaMemcpy(d_work_q, &h_work_q, sizeof(queue_intersect), cudaMemcpyHostToDevice);
 
+	// prepare first queue counters
+	int h_count_rays_gen = 0, h_count_work_todo = 0;
+	int *d_count_rays_gen, *d_count_work_todo;
+	cudaMalloc(&d_count_rays_gen, sizeof(int)); cudaMalloc(&d_count_work_todo, sizeof(int));
+	cudaMemcpy(d_count_rays_gen, &h_count_rays_gen, sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_count_work_todo, &h_count_work_todo, sizeof(int), cudaMemcpyHostToDevice);	
+
 	//Prepare second kernel
-	cudaMemset(&done_count,0,sizeof(int));
+	// cudaMemset(&done_count,0,sizeof(int));
 	
-	kernel_prim_ray_gen <<< dimGrid, dimBlock >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q);
-	kernel_intersect <<< dimGrid, dimBlock >>>(d_work_q, d_newGridAccel);
+	kernel_prim_ray_gen <<< dimGrid, dimBlock >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q, d_count_rays_gen, d_count_work_todo);
+	// kernel_intersect <<< dimGrid, dimBlock >>>(d_work_q, d_newGridAccel);
+
+	// Read inputs from prim_ray_gen
+	cudaMemcpy(&h_count_rays_gen, d_count_rays_gen, sizeof(int), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&h_count_work_todo, d_count_work_todo, sizeof(int), cudaMemcpyDeviceToHost);
+	printf("Count rays gen: %d", h_count_rays_gen);
+	printf("Count work to do: %d", h_count_work_todo);	
+
 
 	cudaEventRecord(k_start);
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);    
