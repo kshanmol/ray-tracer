@@ -14,7 +14,7 @@
 #define HD __host__ __device__
 #define WIDTH 32
 #define REFLECT_DEPTH 3
-#define Q_MAX 10000000
+#define Q_MAX (WIDTH*WIDTH)
 #define WORK_COUNT (WIDTH*WIDTH) //Total number of pixels
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
@@ -133,22 +133,21 @@ void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f
 	queue_intersect_add(work_q, ray, x, y);
 }
 
-/*
+
 __global__
-void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel){
+void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *count_rays_gen, int *count_work_todo, int *count_work_consumed){
 
     Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(0), 0);
     double tnear = INFINITY;
     Vec3f normal(0);
 
-	printf("%d ", done_count);
 	
-	while(done_count < WORK_COUNT){
+	while(*count_rays_gen < Q_MAX || *count_work_todo > 0){
+
+		// TODO: not implemented hash check till now.
 
 		queue_intersect_elem elem = get_intersect_work(work_q);
-		// if (elem.x == 7331 && elem.y == 7331) continue;
-
-		printf("%d %d-", elem.x, elem.y);
+		if (elem.x == 7331 && elem.y == 7331) continue;
 
 		Ray ray = elem.ray;
 		Intersection* isect;
@@ -156,23 +155,22 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel){
     	double tnear = INFINITY;
     	Vec3f normal(0);
 
-		// int xx = done_count;		
-		printf(".");
-
 		bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, tnear, normal, false); // debug = false;    
     	if (hitSomething){
-			atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
+			// atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 			// printf("1");	
 		}
 		else{
-			atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
+			// atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 		}
 
+		atomicInc((unsigned int *)count_work_consumed, Q_MAX);
+		atomicDec((unsigned int *)count_work_todo, Q_MAX);
 		//atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 	}
 
 } 
-*/
+
 
 __global__
 void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triangle* triangle_list, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos){
@@ -493,17 +491,24 @@ void render(std::vector<Triangle*> &triangle_list){
 	cudaMemcpy(d_count_work_todo, &h_count_work_todo, sizeof(int), cudaMemcpyHostToDevice);	
 
 	//Prepare second kernel
-	// cudaMemset(&done_count,0,sizeof(int));
+	int h_count_work_consumed = 0;
+	int *d_count_work_consumed;
+	cudaMalloc(&d_count_work_consumed, sizeof(int));
+    cudaMemcpy(d_count_work_consumed, &h_count_work_consumed, sizeof(int), cudaMemcpyHostToDevice);
 	
 	kernel_prim_ray_gen <<< dimGrid, dimBlock >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q, d_count_rays_gen, d_count_work_todo);
-	// kernel_intersect <<< dimGrid, dimBlock >>>(d_work_q, d_newGridAccel);
+	kernel_intersect <<< dimGrid, dimBlock >>>(d_work_q, d_newGridAccel, d_count_rays_gen, d_count_work_todo, d_count_work_consumed);
 
 	// Read inputs from prim_ray_gen
 	cudaMemcpy(&h_count_rays_gen, d_count_rays_gen, sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(&h_count_work_todo, d_count_work_todo, sizeof(int), cudaMemcpyDeviceToHost);
-	printf("Count rays gen: %d", h_count_rays_gen);
-	printf("Count work to do: %d", h_count_work_todo);	
+	printf("\n");
+	printf("Count rays gen: %d\n", h_count_rays_gen);
+	printf("Count work to do: %d\n", h_count_work_todo);	
 
+	// Read inputs from consumer
+	cudaMemcpy(&h_count_work_consumed, d_count_work_consumed, sizeof(int), cudaMemcpyDeviceToHost);
+	printf("Work consumed: %d\n", h_count_work_consumed);
 
 	cudaEventRecord(k_start);
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);    
