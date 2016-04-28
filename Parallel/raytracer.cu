@@ -16,6 +16,7 @@
 #define WIDTH 1024
 #define REFLECT_DEPTH 3
 
+#define HEATMAP_SCALE 50000
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
 HD float min_(float a, float b){ return (a > b) ? b : a ;}
@@ -138,6 +139,8 @@ Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size)
 
 Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 
+    clock_t __thread_start_time = clock();
+
     // TODO: pass as pointer in parameters
     // base color, kd, ks, spec_alpha, ka, reflective, km
     material materials[4] = {};
@@ -156,9 +159,11 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 
     bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, tnear, normal, isDebugThread);
 
-    if (!hitSomething)
-	    return Vec3f(0);
-
+    if (!hitSomething){
+            clock_t __thread_end_time = clock();
+            Vec3f heat_map_color = Vec3f(0, (int)(__thread_end_time - __thread_start_time)/HEATMAP_SCALE, 0);
+	    return Vec3f(0).add(heat_map_color);
+    }
 
     // assume only 1 light over here.
     Vec3f light_pos(2, 5, 0);
@@ -216,15 +221,17 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 	
       	//if(ray_hit){
             Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread); // TODO: extremely inefficient.
-            return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
+            color = color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
         // }
         // else{
         //     return  color.multiply(mat.base_color);
         // }*/
     }
 
+    clock_t __thread_end_time = clock();
+    Vec3f heat_map_color(0, (int)(__thread_end_time - __thread_start_time) /HEATMAP_SCALE, 0);
 
-    return color;
+    return color.add(heat_map_color);
 }
 
 void render(std::vector<Triangle*> &triangle_list){
