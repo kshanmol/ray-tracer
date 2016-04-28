@@ -495,9 +495,12 @@ void render(std::vector<Triangle*> &triangle_list){
 	int *d_count_work_consumed;
 	cudaMalloc(&d_count_work_consumed, sizeof(int));
     cudaMemcpy(d_count_work_consumed, &h_count_work_consumed, sizeof(int), cudaMemcpyHostToDevice);
+
+	cudaStream_t rayGenStream, intersectionStream;
+	cudaStreamCreate(&rayGenStream); cudaStreamCreate(&intersectionStream);
 	
-	kernel_prim_ray_gen <<< dimGrid, dimBlock >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q, d_count_rays_gen, d_count_work_todo);
-	kernel_intersect <<< dimGrid, dimBlock >>>(d_work_q, d_newGridAccel, d_count_rays_gen, d_count_work_todo, d_count_work_consumed);
+	kernel_prim_ray_gen <<< dimGrid, dimBlock, 0, rayGenStream >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q, d_count_rays_gen, d_count_work_todo);
+	kernel_intersect <<< dimGrid, dimBlock, 0, intersectionStream >>>(d_work_q, d_newGridAccel, d_count_rays_gen, d_count_work_todo, d_count_work_consumed);
 
 	// Read inputs from prim_ray_gen
 	cudaMemcpy(&h_count_rays_gen, d_count_rays_gen, sizeof(int), cudaMemcpyDeviceToHost);
@@ -537,6 +540,10 @@ void render(std::vector<Triangle*> &triangle_list){
 	cudaFree(d_newGridAccel);
 	cudaFree(d_work_q_elems);
 	cudaFree(d_work_q);
+
+	cudaStreamDestroy(rayGenStream);
+	cudaStreamDestroy(intersectionStream);	
+
     //Parallel program ends*/
 
     /*// Serial program begins : NB : Camera has changed. This will not work now.
