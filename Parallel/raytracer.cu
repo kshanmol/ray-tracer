@@ -13,7 +13,7 @@
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
-#define WIDTH 512
+#define WIDTH 1024
 #define REFLECT_DEPTH 3
 
 
@@ -207,15 +207,20 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
         double temp_tnear = INFINITY;
         Vec3f temp_normal(0);
 
-        bool ray_hit = newGridAccel->Intersect(reflect_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
 
-        if(ray_hit){
+		//Removed double checking of intersection for reflected ray.
+		//Commented code used to check for intersection before calling fast_trace to determine color
+ 
+        //bool ray_hit = newGridAccel->Intersect(reflect_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
+		//Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread);
+	
+      	//if(ray_hit){
             Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread); // TODO: extremely inefficient.
             return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
-        }
-        else{
-            return  color.multiply(mat.base_color);
-        }
+        // }
+        // else{
+        //     return  color.multiply(mat.base_color);
+        // }*/
     }
 
 
