@@ -15,6 +15,7 @@
 #define HD __host__ __device__
 #define WIDTH 1024
 #define REFLECT_DEPTH 3
+#define Q_MAX 1000000
 
 
 HD float max_(float a, float b){ return (a < b) ? b : a; }
@@ -27,6 +28,77 @@ HD int clamp(int what, int low, int high);
 HD Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size);
 HD Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread);
 HD Vec3f reflect(const Vec3f &I, const Vec3f &N);
+
+typedef struct queue_intersect_elem{
+
+	Ray ray; //Ray for the pixel
+	int x,y; //Pixel coordinates
+
+}queue_intersect_elem;
+
+typedef struct queue_intersect{
+
+	queue_intersect_elem* elems;
+	int front;
+	
+}queue_intersect;
+
+
+__device__
+ void queue_intersect_add(queue_intersect* q, Ray ray, int x, int y){
+
+	int index = atomicInc((unsigned int *)&(q->front), Q_MAX);
+	//Handle overflow (Q_MAX)
+	
+	queue_intersect_elem elem;
+	elem.ray = ray;
+	elem.x = x; elem.y = y;
+	
+	q->elems[index] = elem;
+    printf("%d ", index);
+}
+
+__global__
+void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos, queue_intersect* work_q){
+
+    //Pixel coordinates
+    int x = threadIdx.x + blockIdx.x*blockDim.x;
+    int y = threadIdx.y + blockIdx.y*blockDim.y;
+
+    //Unpack parameters
+    int tl_size = (int) params[0];
+    float width = params[1], height = params[2];
+    float focal_distance = params[3];
+    float aspectratio = params[4];
+    Vec3f u = _u;
+    Vec3f v = _v;
+    Vec3f w = _w;
+
+    Vec3f dir(0);
+    dir = dir.add(w.negate().scale(focal_distance));
+    float xw = aspectratio*(x - width/2.0 + 0.5)/width;
+    float yw = (y - height/2.0 + 0.5)/height;
+    dir = dir.add(u.scale(xw));
+    dir = dir.add(v.scale(yw));
+    dir.normalize();
+
+    Ray ray(camerapos, dir, 0);
+
+	float rayT;
+	if(newGridAccel->bounds.Inside(ray(ray.mint)))
+	 	rayT = ray.mint;
+	else if (!newGridAccel->bounds.Intersect(ray, 0, &rayT)){ //second param <- isDebugThread
+		return;
+	}
+
+	queue_intersect_add(work_q, ray, x, y);
+}
+
+__global__
+void kernel_intersect(){
+
+
+} 
 
 __global__
 void trace_kernel (float* params, Vec3f* image,GridAccel* d_newGridAccel, Triangle* triangle_list, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos){
@@ -141,7 +213,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     // TODO: pass as pointer in parameters
     // base color, kd, ks, spec_alpha, ka, reflective, km
     material materials[4] = {};
-    init_material(&materials[0], Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, true, 0.4); // plane
+    init_material(&materials[0], Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, true, 0.6); // plane
     init_material(&materials[1], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
     init_material(&materials[2], Vec3f(0, 20, 0), 10.0f, 10.0f, 1.25, 0.3f, true, 0.9999); // blub
     init_material(&materials[3], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
@@ -211,6 +283,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 		//Removed double checking of intersection for reflected ray.
 		//Commented code used to check for intersection before calling fast_trace to determine color
  
+
         //bool ray_hit = newGridAccel->Intersect(reflect_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
 		//Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread);
 	
@@ -329,12 +402,27 @@ void render(std::vector<Triangle*> &triangle_list){
 	//Copy GridAccel
 	cudaMemcpy(d_newGridAccel, newGridAccel, sizeof(GridAccel), cudaMemcpyHostToDevice);
 
+	//Prepare first kernel
+	queue_intersect* d_work_q;
+	queue_intersect_elem* d_work_q_elems;
+	cudaMalloc(&d_work_q_elems, sizeof(queue_intersect_elem) * Q_MAX);
+	queue_intersect h_work_q;
+	h_work_q.front = 0; h_work_q.elems = d_work_q_elems;
+	cudaMalloc(&d_work_q, sizeof(queue_intersect));
+	cudaMemcpy(d_work_q, &h_work_q, sizeof(queue_intersect), cudaMemcpyHostToDevice);
+
+	kernel_prim_ray_gen <<< dimGrid, dimBlock >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q);
+
+
 	cudaEventRecord(k_start);
     trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);
     cudaEventRecord(k_stop);
 
     cudaMemcpy(image, d_image, width*height*sizeof(Vec3f), cudaMemcpyDeviceToHost);
     cudaEventRecord(t_stop);
+
+
+
 
     //Print timing data
     cudaEventSynchronize(k_stop);
@@ -353,7 +441,8 @@ void render(std::vector<Triangle*> &triangle_list){
     cudaFree(d_params);
 	cudaFree(d_voxels);
 	cudaFree(d_newGridAccel);
-
+	cudaFree(d_work_q_elems);
+	cudaFree(d_work_q);
     //Parallel program ends*/
 
     /*// Serial program begins : NB : Camera has changed. This will not work now.
