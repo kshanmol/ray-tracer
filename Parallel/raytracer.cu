@@ -12,7 +12,7 @@
 
 #define BLOCK_SIZE 32
 #define HD __host__ __device__
-#define WIDTH 32
+#define WIDTH 64
 #define REFLECT_DEPTH 3
 #define Q_MAX (WIDTH*WIDTH)
 #define WORK_COUNT (WIDTH*WIDTH) //Total number of pixels
@@ -28,25 +28,6 @@ HD Vec3f trace(Ray ray, Triangle* triangle_list, int tl_size);
 HD Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread);
 HD Vec3f reflect(const Vec3f &I, const Vec3f &N);
 
-/*
-typedef struct Lock {
-	int *mutex;
-	Lock() {
-		int state = 0;
-		cudaMalloc((void**) &mutex, sizeof(int));
-		cudaMemcpy(mutex, &state, sizeof(int), cudaMemcpyHostToDevice);
-	}
-	~Lock(){
-		cudaFree(mutex);
-	}
-	__device__ void lock() {
-		while(atomicCAS(mutex, 0, 1) != 0);
-	}
-	__device__ void unlock() {
-		atomicExch(mutex, 0);
-	}
-} Lock;
-*/
 
 typedef struct queue_intersect_elem{
 
@@ -92,6 +73,65 @@ queue_intersect_elem get_intersect_work(queue_intersect *q)
 	return result;
 }
 
+
+
+/*
+
+ Datastructures and kernel for workq_shading
+
+*/
+typedef struct workq_shading_elem{
+
+    Ray ray; //Ray for the pixel
+    int x,y; //Pixel coordinates
+	double tnear; // parametric t for poi.
+	Triangle triangle_near; // nearest intersected triangle
+	Vec3f normal; // normal
+
+}workq_shading_elem;
+
+typedef struct workq_shading{
+
+    workq_shading_elem* elems;
+    int front;
+
+}workq_shading;
+
+__device__
+void workq_shading_add(workq_shading* q, Ray ray, int x, int y, double tnear, Triangle triangle_near, Vec3f normal){
+
+    int index = atomicInc((unsigned int *)&(q->front), Q_MAX);
+    //Handle overflow (Q_MAX)
+
+    workq_shading_elem elem;
+    elem.ray = ray;
+    elem.x = x; elem.y = y;
+	elem.tnear = tnear; elem.normal = normal;
+	elem.triangle_near = triangle_near;
+
+    q->elems[index] = elem;
+}
+
+__device__
+workq_shading_elem get_shading_work(workq_shading *q)
+{
+
+    workq_shading_elem result;
+
+    int index = atomicDec((unsigned int *)&(q->front), Q_MAX);
+    if (index == 0){ // Underflow
+        result.x = result.y = 7331;
+    }
+    else {
+        result = q->elems[index - 1];
+    }
+
+    return result;
+}
+
+
+
+
 __global__
 void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f _v, Vec3f _w, Vec3f camerapos, queue_intersect* work_q, int *count_rays_gen, int *count_work_todo){
 
@@ -135,7 +175,7 @@ void kernel_prim_ray_gen(float* params, GridAccel* newGridAccel, Vec3f _u, Vec3f
 
 
 __global__
-void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *count_rays_gen, int *count_work_todo, int *count_work_consumed){
+void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *count_rays_gen, int *count_work_todo, int *count_work_consumed, bool *is_complete, workq_shading *shading_workq){
 
     Triangle triangle_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(0), 0);
     double tnear = INFINITY;
@@ -151,9 +191,6 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *cou
 
 
 	while(true){
-
-		// TODO: not implemented hash check till now.
-
 		if (threadIdx.x == 0){
 			shared_count_rays_gen = *count_rays_gen;
 			shared_count_work_todo = *count_work_todo;
@@ -176,6 +213,7 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *cou
 
 		bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, tnear, normal, false); // debug = false;    
     	if (hitSomething){
+			workq_shading_add(shading_workq, ray, elem.x, elem.y, tnear, triangle_near, normal);
 			// atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 			//printf("1");	
 		}
@@ -188,8 +226,112 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *cou
 		atomicDec((unsigned int *)count_work_todo, Q_MAX);
 		//atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 	}
-
+	if (threadIdx.x == 0){
+		*is_complete = true;
+	}
+	__syncthreads();
 } 
+
+
+__device__
+Vec3f _worker_kernel_shading(workq_shading_elem &elem, GridAccel *newGridAccel)
+{
+    material materials[4] = {};
+    init_material(&materials[0], Vec3f(0, 0, 255), 1.0f, 1.5f, 1.25, 0.3f, true, 0.6); // plane
+    init_material(&materials[1], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
+    init_material(&materials[2], Vec3f(0, 20, 0), 10.0f, 10.0f, 1.25, 0.3f, true, 0.9999); // blub
+    init_material(&materials[3], Vec3f(255, 0, 0), 10.0f, 10.0f, 1.25, 0.3f, false); // spot
+
+    Intersection* isect = NULL;
+	
+	// unpacking elem
+	Ray ray = elem.ray;
+	Triangle triangle_near = elem.triangle_near;
+	double tnear = elem.tnear;
+	Vec3f normal = elem.normal;
+    Vec3f rayorig = ray.orig, raydir = ray.raydir;
+
+    // assume only 1 light over here.
+    Vec3f light_pos(2, 5, 0);
+    // light_pos = ray.orig;
+    // light_pos.z = -1*light_pos.z;
+
+    Vec3f poi = rayorig.add( raydir.scale(tnear) );
+    Vec3f v = raydir.negate().normalize();
+    Vec3f l = light_pos.subtract(poi).normalize();
+    Vec3f h = v.add(l).normalize();
+
+    // Simple blinn phong shading
+    material mat = materials[triangle_near.material_index];
+    Vec3f base_color = mat.base_color;
+    float kd = mat.kd;
+    float ks = mat.ks;
+    float spec_alpha = mat.spec_alpha;
+    float ka = mat.ka;
+
+    Vec3f diffuse = base_color.multiply(max_(float(0),normal.dotProduct(l))).scale(kd);
+    Vec3f specular = base_color.multiply(pow(max_(float(0), normal.dotProduct(h)),spec_alpha)).scale(ks);
+    Vec3f ambient = base_color.scale(ka);
+    Vec3f color = diffuse.add(specular).add(ambient);
+
+    Vec3f shadow_ray_dir = light_pos.subtract(poi).normalize();
+
+    Ray shadow_ray(poi, shadow_ray_dir, eps + 0.02f);
+
+	/*	
+    bool in_shadow = false;
+    {
+        Triangle temp_tri_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(0), 0);
+        double temp_tnear = INFINITY;
+        Vec3f temp_normal(0);
+
+        in_shadow = newGridAccel->Intersect(shadow_ray, isect, temp_tri_near, temp_tnear, temp_normal, false); // last parameter -> isDebugThread set to false
+    }
+    if (in_shadow){
+        color = color.scale(0.5f);
+    }
+
+    if (mat.reflective && ray.depth < REFLECT_DEPTH){
+        Vec3f reflect_dir = reflect(raydir.normalize(), normal.normalize()).normalize();
+        Ray reflect_ray(poi, reflect_dir, ray, eps); // set ray as parent ray
+
+        Triangle temp_tri_near(Vec3f(100), Vec3f(100), Vec3f(100),Vec3f(100),Vec3f(100), Vec3f(0), 0);
+        double temp_tnear = INFINITY;
+        Vec3f temp_normal(0);
+
+        // instead of checking whether the reflect ray intersects or not, and then calling the shading method,
+        // we can directly call fast trace and handle the resultant color;
+        Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, false);
+        return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
+    }
+	*/
+
+    return color;
+
+}
+
+__global__
+void kernel_shading(workq_shading *work_q, GridAccel *newGridAccel, Vec3f *image, bool *is_intersection_completed)
+{
+	__shared__ bool shared_intersection_completed;
+	shared_intersection_completed = false;
+
+	while(true){
+
+		if(threadIdx.x == 0){
+			shared_intersection_completed = *is_intersection_completed;
+		}
+		__syncthreads();
+
+		if (shared_intersection_completed) break; //TODO: work on condition
+
+        workq_shading_elem elem = get_shading_work(work_q);
+        int x = elem.x, y = elem.y;
+		if (x == 7331 && y == 7331) continue;
+
+		image[y*WIDTH + x] = _worker_kernel_shading(elem, newGridAccel);	
+	}
+}
 
 
 __global__
@@ -371,21 +513,10 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
         double temp_tnear = INFINITY;
         Vec3f temp_normal(0);
 
-
-		//Removed double checking of intersection for reflected ray.
-		//Commented code used to check for intersection before calling fast_trace to determine color
- 
-
-        //bool ray_hit = newGridAccel->Intersect(reflect_ray, isect, temp_tri_near, temp_tnear, temp_normal, isDebugThread);
-		//Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread);
-	
-      	//if(ray_hit){
-            Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread); // TODO: extremely inefficient.
-            return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
-        // }
-        // else{
-        //     return  color.multiply(mat.base_color);
-        // }*/
+		// instead of checking whether the reflect ray intersects or not, and then calling the shading method,
+		// we can directly call fast trace and handle the resultant color;
+        Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread);
+        return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
     }
 
 
@@ -494,7 +625,7 @@ void render(std::vector<Triangle*> &triangle_list){
 	//Copy GridAccel
 	cudaMemcpy(d_newGridAccel, newGridAccel, sizeof(GridAccel), cudaMemcpyHostToDevice);
 
-	//Prepare first kernel
+	//Prepare queue for first kernel
 	queue_intersect* d_work_q;
 	queue_intersect_elem* d_work_q_elems;
 	cudaMalloc(&d_work_q_elems, sizeof(queue_intersect_elem) * Q_MAX);
@@ -516,14 +647,32 @@ void render(std::vector<Triangle*> &triangle_list){
 	cudaMalloc(&d_count_work_consumed, sizeof(int));
     cudaMemcpy(d_count_work_consumed, &h_count_work_consumed, sizeof(int), cudaMemcpyHostToDevice);
 
+	// prepare queue for shading kernel
+	workq_shading *d_workq_shading;
+	workq_shading_elem *d_workq_shading_elems;
+	cudaMalloc(&d_workq_shading_elems, sizeof(workq_shading_elem) * Q_MAX);
+	workq_shading h_workq_shading;
+	h_workq_shading.front = 0; h_workq_shading.elems = d_workq_shading_elems;
+	cudaMalloc(&d_workq_shading, sizeof(workq_shading));
+	cudaMemcpy(d_workq_shading, &h_workq_shading, sizeof(workq_shading), cudaMemcpyHostToDevice);
+
+	// prepare flag for shading workq.
+	bool h_intersection_completed = false;
+	bool *d_intersection_completed;
+	cudaMalloc(&d_intersection_completed, sizeof(bool));
+	cudaMemcpy(d_intersection_completed, &h_intersection_completed, sizeof(bool), cudaMemcpyHostToDevice);
+
 	// Wait for copy to finish
 	cudaThreadSynchronize();
 
-	cudaStream_t rayGenStream, intersectionStream;
-	cudaStreamCreate(&rayGenStream); cudaStreamCreate(&intersectionStream);
+	// creating streams
+	cudaStream_t rayGenStream, intersectionStream, shadingStream;
+	cudaStreamCreate(&rayGenStream); cudaStreamCreate(&intersectionStream); cudaStreamCreate(&shadingStream);
 	
+	// launching kernels in different streams.
 	kernel_prim_ray_gen <<< dimGrid, dimBlock, 0, rayGenStream >>>(d_params, d_newGridAccel, u, v, w, camera_pos, d_work_q, d_count_rays_gen, d_count_work_todo);
-	kernel_intersect <<< dimGrid, dimBlock, 0, intersectionStream >>>(d_work_q, d_newGridAccel, d_count_rays_gen, d_count_work_todo, d_count_work_consumed);
+	kernel_intersect <<< dimGrid, dimBlock, 0, intersectionStream >>>(d_work_q, d_newGridAccel, d_count_rays_gen, d_count_work_todo, d_count_work_consumed, d_intersection_completed, d_workq_shading);
+	kernel_shading <<< dimGrid, dimBlock, 0, shadingStream >>>(d_workq_shading, d_newGridAccel, d_image, d_intersection_completed);
 
 	// Read inputs from prim_ray_gen
 	cudaMemcpy(&h_count_rays_gen, d_count_rays_gen, sizeof(int), cudaMemcpyDeviceToHost);
@@ -563,9 +712,16 @@ void render(std::vector<Triangle*> &triangle_list){
 	cudaFree(d_newGridAccel);
 	cudaFree(d_work_q_elems);
 	cudaFree(d_work_q);
+    cudaFree(d_count_rays_gen);
+    cudaFree(d_count_work_consumed);
+    cudaFree(d_workq_shading_elems);
+    cudaFree(d_workq_shading);
+    cudaFree(d_intersection_completed);
+
 
 	cudaStreamDestroy(rayGenStream);
 	cudaStreamDestroy(intersectionStream);	
+	cudaStreamDestroy(shadingStream);
 
     //Parallel program ends*/
 
