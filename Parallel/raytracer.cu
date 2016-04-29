@@ -216,7 +216,7 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
 	
       	//if(ray_hit){
             Vec3f recursive_color = fast_trace(reflect_ray, newGridAccel, isDebugThread); // TODO: extremely inefficient.
-            return color.multiply(mat.base_color).scale(1 - mat.km).add(recursive_color.scale(mat.km));
+            return color.scale(1 - mat.km).add(recursive_color.scale(mat.km));
         // }
         // else{
         //     return  color.multiply(mat.base_color);
