@@ -13,7 +13,7 @@ cpu:
 
 
 simple:
-	g++ -o ray_tracer raytracer.cpp
+	nvcc -Xptxas --maxrregcount=32 -arch=sm_20 raytracer.cu -o ray_tracer
 opt:
 	g++ -O3 -o ray_tracer raytracer.cpp
 

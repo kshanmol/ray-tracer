@@ -94,17 +94,17 @@ Vec3f trace(Vec3f rayorig, Vec3f raydir, Triangle* triangle_list, int tl_size)
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(0, 0, 500);
+    Vec3f light_pos(0, -500, 100);
 
     Vec3f poi = rayorig.add( raydir.scale(tnear) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
-    Vec3f l = poi.subtract(light_pos).normalize();
+    Vec3f l = light_pos.subtract(poi).normalize();
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near->getNormal(poi).normalize();
 
     Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
-    Vec3f ambient = Vec3f(40.0);
+    Vec3f ambient = Vec3f(40.0f);
 
     return diffuse.add(specular).add(ambient);
 
@@ -131,14 +131,13 @@ Vec3f fast_trace(Ray& ray, GridAccel* newGridAccel, int isDebugThread){
     float spec_alpha = 4;
 
     // assume only 1 light over here.
-    Vec3f light_pos(0, -500, -100);
+    Vec3f light_pos(0, -500, 100);
 
     Vec3f poi = rayorig.add( raydir.scale(t0) );
     Vec3f eye = rayorig.subtract(poi).normalize();  //raydir.negate();
     Vec3f l = light_pos.subtract(poi).normalize();
     Vec3f half = eye.add(l).normalize();
     Vec3f n = triangle_near.getNormal(poi).normalize();
-
 
     Vec3f diffuse = color.scale(kd * max_(float(0), n.dotProduct(l.normalize())));
     Vec3f specular = color.scale(ks * pow(max_(float(0), reflect(l,n).dotProduct(raydir.negate())), spec_alpha));
@@ -237,6 +236,8 @@ void render(std::vector<Triangle*> &triangle_list){
 		cnt++;
     }
 
+	//cudaEventRecord(t_stop);
+
     cudaMemcpy(d_voxels, h_voxels, totalVoxels*sizeof(Voxel*), cudaMemcpyHostToDevice);
 
     //Allocate memory for GridAccel
@@ -301,7 +302,7 @@ void render(std::vector<Triangle*> &triangle_list){
     //Serial program ends*/
 
     //Write output to ppm file
-    std::ofstream ofs("./nefertiti0.ppm", std::ios::out | std::ios::binary);
+    std::ofstream ofs("./nefertiti4.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (int i = 0; i < width * height; ++i) {
         ofs << (unsigned char)(std::min(float(1), image[i].x/255)*255 ) <<
