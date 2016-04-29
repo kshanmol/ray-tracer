@@ -141,10 +141,29 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *cou
     double tnear = INFINITY;
     Vec3f normal(0);
 
+	__shared__ int shared_count_rays_gen;
+	__shared__ int shared_count_work_todo;
+	__shared__ int shared_should_continue;
 	
-	while(*count_rays_gen < Q_MAX || *count_work_todo > 0){
+	shared_count_rays_gen = 0;
+    shared_count_work_todo = 0;
+    shared_should_continue = true;	
+
+
+	while(true){
 
 		// TODO: not implemented hash check till now.
+
+		if (threadIdx.x == 0){
+			shared_count_rays_gen = *count_rays_gen;
+			shared_count_work_todo = *count_work_todo;
+			if (shared_count_rays_gen == Q_MAX && shared_count_work_todo == 0) shared_should_continue = false;
+		}
+		__syncthreads();
+	
+		if (!shared_should_continue){
+			break;
+		}
 
 		queue_intersect_elem elem = get_intersect_work(work_q);
 		if (elem.x == 7331 && elem.y == 7331) continue;
@@ -158,9 +177,10 @@ void kernel_intersect(queue_intersect* work_q, GridAccel* newGridAccel, int *cou
 		bool hitSomething = newGridAccel->Intersect(ray, isect, triangle_near, tnear, normal, false); // debug = false;    
     	if (hitSomething){
 			// atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
-			// printf("1");	
+			//printf("1");	
 		}
 		else{
+			//printf("0");
 			// atomicInc((unsigned int*)&done_count, 2*WIDTH*WIDTH);
 		}
 
@@ -496,6 +516,9 @@ void render(std::vector<Triangle*> &triangle_list){
 	cudaMalloc(&d_count_work_consumed, sizeof(int));
     cudaMemcpy(d_count_work_consumed, &h_count_work_consumed, sizeof(int), cudaMemcpyHostToDevice);
 
+	// Wait for copy to finish
+	cudaThreadSynchronize();
+
 	cudaStream_t rayGenStream, intersectionStream;
 	cudaStreamCreate(&rayGenStream); cudaStreamCreate(&intersectionStream);
 	
@@ -514,7 +537,7 @@ void render(std::vector<Triangle*> &triangle_list){
 	printf("Work consumed: %d\n", h_count_work_consumed);
 
 	cudaEventRecord(k_start);
-    trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);    
+    //trace_kernel <<< dimGrid, dimBlock >>> (d_params, d_image, d_newGridAccel, d_triangle_list, u, v , w, camera_pos);    
 
 	cudaEventRecord(k_stop);
 
